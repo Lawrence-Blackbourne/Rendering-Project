@@ -1,7 +1,5 @@
-use crate::renderer::{Renderer, RendererError};
-
 mod renderer;
 
-pub fn get_renderer(name: &str) -> Result<Renderer, RendererError> {
-    Renderer::new(name)
+pub fn get_renderer(name: &str) -> Result<renderer::Renderer, renderer::RendererError> {
+    renderer::Renderer::new(name)
 }
