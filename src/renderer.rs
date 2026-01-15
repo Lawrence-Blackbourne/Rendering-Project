@@ -1,3 +1,7 @@
+mod physical_device_handler;
+mod debugger;
+mod window_handler;
+
 use ash::{vk, Entry, Instance};
 
 #[cfg(debug_assertions)]
@@ -5,16 +9,7 @@ use ash::ext;
 
 use glfw::{self, Glfw};
 
-use std::{ffi::{self, CString}};
-
-#[cfg(debug_assertions)]
-use std::{ops::BitOr, ptr};
-
-const VALIDATION_LAYER_NAMES: &[&str] = &["VK_LAYER_KHRONOS_validation"];
-const VALIDATION_EXTENSION_NAMES: &[&str] = &["VK_EXT_debug_utils"];
-
-const WIDTH: u32 = 800;
-const HEIGHT: u32 = 600;
+use std::ffi::{self, CString};
 
 pub struct Renderer {
     _vulkan_entry: Entry,
@@ -23,6 +18,7 @@ pub struct Renderer {
     glfw_instance: Glfw,
 
     window: glfw::PWindow,
+    physical_device: vk::PhysicalDevice,
 
     #[cfg(debug_assertions)]
     debug_messenger: vk::DebugUtilsMessengerEXT,
@@ -44,9 +40,11 @@ impl Renderer {
         // This provides the permanent debug info
         #[cfg(debug_assertions)]
         let (debug_instance, debug_messenger) =
-            Self::get_debug_messenger(&vulkan_entry, &vulkan_instance)?;
+            debugger::get_debug_messenger(&vulkan_entry, &vulkan_instance)?;
 
-        let window = Self::create_window(name, &mut glfw_instance)?;
+        let window = window_handler::create_window(name, &mut glfw_instance)?;
+
+        let physical_device = physical_device_handler::get_physical_device(&vulkan_instance)?;
 
         Ok(Renderer {
             _vulkan_entry: vulkan_entry,
@@ -54,6 +52,8 @@ impl Renderer {
             glfw_instance,
 
             window,
+
+            physical_device,
 
             #[cfg(debug_assertions)]
             debug_instance,
@@ -69,29 +69,6 @@ impl Renderer {
         } else {
             RendererStatus::Ok
         }
-    }
-
-    /// Creates the glfw window to render to
-    fn create_window(app_name: &str, glfw_instance: &mut Glfw)
-        -> Result<glfw::PWindow, RendererError> {
-        // We reset the window hints and then apply the ones we want
-        glfw_instance.default_window_hints();
-        glfw_instance.window_hint(glfw::WindowHint::ClientApi(glfw::ClientApiHint::NoApi));
-        glfw_instance.window_hint(glfw::WindowHint::Resizable(false));
-
-        let result = glfw_instance.create_window(
-            WIDTH,
-            HEIGHT,
-            app_name,
-            glfw::WindowMode::Windowed
-        );
-
-        let (window, _) = match result {
-            Some(result) => result,
-            None => return Err(RendererError::GlfwCallFailed("create_window".to_string()))
-        };
-
-        Ok(window)
     }
 
     /// Creates the Vulkan Instance
@@ -112,13 +89,13 @@ impl Renderer {
 
         // We need to keep the layer names around for the pointers to have something to point to.
         // Otherwise, we get undefined behavior.
-        let (layer_names, layer_name_pointers) = Self::get_setup_layer_names();
-        Self::validate_setup_layers_exist(&layer_names, &vulkan_entry)?;
+        let (layer_names, layer_name_pointers) = debugger::get_setup_layer_names();
+        debugger::validate_setup_layers_exist(&layer_names, &vulkan_entry)?;
         let (_extension_names, extension_name_pointers) =
-            Self::get_setup_extension_names(&glfw_instance)?;
+            debugger::get_setup_extension_names(&glfw_instance)?;
 
         #[cfg(debug_assertions)]
-        let mut debug_messenger_info = Self::get_debug_messenger_info();
+        let mut debug_messenger_info = debugger::get_debug_messenger_info();
 
         let create_info = vk::InstanceCreateInfo::default()
             .flags(vk::InstanceCreateFlags::empty())
@@ -130,156 +107,7 @@ impl Renderer {
         #[cfg(debug_assertions)]
         let create_info = create_info.push_next(&mut debug_messenger_info);
 
-        //TODO setup temporary debug utils messenger
-
         Ok(unsafe { vulkan_entry.create_instance(&create_info, None) }?)
-    }
-
-    /// Gets the names of the layers needed to set up the vulkan instance including debugging.
-    fn get_setup_layer_names() -> (Vec<CString>, Vec<*const i8>) {
-
-        let mut layers = vec![];
-
-        if cfg!(debug_assertions) {
-            for layer in VALIDATION_LAYER_NAMES {
-                layers.push(*layer);
-            }
-        }
-
-        let layer_names : Vec<_> = layers
-            .iter()
-            .map(|name| CString::new(*name)
-                .expect("Hard coded layer names should not contain any 0 chars"))
-            .collect();
-
-        let layer_pointers = layer_names
-            .iter()
-            .map(|name| name.as_ptr())
-            .collect();
-
-        (layer_names, layer_pointers)
-    }
-
-    /// Validates that the layers that are passed to it are available to use.
-    fn validate_setup_layers_exist(layer_names: &Vec<CString>, entry: &Entry)
-        -> Result<(), RendererError> {
-        let available_layers = unsafe {
-            entry.enumerate_instance_layer_properties()
-        }?;
-
-        for layer_name in layer_names {
-            let mut layer_exists = false;
-            for available_layer in available_layers.iter() {
-                if layer_name.as_c_str() == available_layer.layer_name_as_c_str()? {
-                    layer_exists = true;
-                    break;
-                }
-            }
-            if !layer_exists {
-                return Err(RendererError::LayerRequiredNotSupportedError);
-            }
-        }
-        Ok(())
-    }
-
-    /// Gets the names of the extensions needed to set up the vulkan instance including debugging.
-    fn get_setup_extension_names(glfw_instance: &Glfw)
-        -> Result<(Vec<CString>, Vec<*const i8>), RendererError> {
-
-        let mut extension_names = vec![];
-
-        let glfw_extensions = match glfw_instance.get_required_instance_extensions() {
-            Some(glfw_extensions) => {
-                glfw_extensions
-            }
-            None => return Err(RendererError::GlfwCallFailed("get_required_instance_extensions"
-                .to_string()))
-        };
-
-        for extension in glfw_extensions {
-            extension_names.push(CString::new(extension)?);
-        }
-
-        let mut debug_extensions = vec![];
-
-        if cfg!(debug_assertions) {
-            for extension in VALIDATION_EXTENSION_NAMES {
-                debug_extensions.push(*extension);
-            }
-        }
-
-        for extension in debug_extensions {
-            extension_names.push(CString::new(extension)
-                .expect("Hard coded layer names should not contain any 0 chars"));
-        }
-
-        let extension_pointers = extension_names
-            .iter()
-            .map(|name| name.as_ptr())
-            .collect();
-
-        Ok((extension_names, extension_pointers))
-    }
-
-    /// Sets up the debug messenger extension.
-    #[cfg(debug_assertions)]
-    fn get_debug_messenger_info() -> vk::DebugUtilsMessengerCreateInfoEXT<'static> {
-        // We want warnings and errors but not verbose diagnostic messages
-        let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
-            .bitor(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR);
-
-        let type_flags = vk::DebugUtilsMessageTypeFlagsEXT::GENERAL
-            .bitor(vk::DebugUtilsMessageTypeFlagsEXT::VALIDATION)
-            .bitor(vk::DebugUtilsMessageTypeFlagsEXT::PERFORMANCE);
-
-        let debug_messenger_info = vk::DebugUtilsMessengerCreateInfoEXT::default()
-            .flags(vk::DebugUtilsMessengerCreateFlagsEXT::empty())
-            .message_severity(severity_flags)
-            .message_type(type_flags)
-            .pfn_user_callback(Some(Self::debug_messenger_callback_function))
-            .user_data(ptr::null_mut());
-
-        debug_messenger_info
-    }
-
-    /// Creates the main debug messenger the debugging instance to go along with it
-    #[cfg(debug_assertions)]
-    fn get_debug_messenger(vulkan_entry: &Entry, vulkan_instance: &Instance)
-        -> Result<(ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT), RendererError> {
-        let debug_instance = ext::debug_utils::Instance::new(vulkan_entry, vulkan_instance);
-        let debug_messenger = unsafe {
-            debug_instance.create_debug_utils_messenger(
-                &Self::get_debug_messenger_info(),
-                None
-            ) }?;
-
-        Ok((debug_instance, debug_messenger))
-    }
-
-    #[unsafe(no_mangle)]
-    unsafe extern "system" fn debug_messenger_callback_function(
-        _severity_flags: vk::DebugUtilsMessageSeverityFlagsEXT,
-        _type_flags: vk::DebugUtilsMessageTypeFlagsEXT,
-        callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT<'_>,
-        _user_data_pointer: *mut ffi::c_void)
-        -> u32 {
-
-        let data = match unsafe { callback_data.as_ref() } {
-            Some(data) => data,
-            None => {
-                eprintln!("Callback data reference dangling!");
-                return vk::FALSE;
-            }
-        };
-
-        let message = match unsafe { data.message_as_c_str() } {
-            Some(message) => message.to_str().unwrap_or_else(|_| "Message conversion failed!"),
-            None => "Callback has no message!",
-        };
-
-        eprintln!("Callback message: {}", message);
-
-        vk::FALSE
     }
 }
 
@@ -307,6 +135,8 @@ pub enum RendererError {
     CStringDidNotContainTerminatingNullButeError,
     CStringCouleNotBeConvertedToString(ffi::IntoStringError),
     LayerRequiredNotSupportedError,
+    UnableToFindSuitablePhysicalDeviceError,
+
     LogicError(String),
     UnknownError,
 
@@ -503,48 +333,7 @@ mod tests {
 
     #[test]
     fn can_create_renderer() {
+        println!("TEST");
         Renderer::new("test").unwrap();
-    }
-
-    #[test]
-    fn layer_support_no_layers() {
-        let layers = vec![];
-        assert_eq!(test_layer_support(&layers), true)
-    }
-
-    #[test]
-    fn layer_support_valid_layers() {
-        let layers = vec!["VK_LAYER_KHRONOS_validation"];
-        assert_eq!(test_layer_support(&layers), true)
-    }
-
-    #[test]
-    fn layer_support_invalid_layers() {
-        let layers = vec!["random name"];
-        assert_eq!(test_layer_support(&layers), false)
-    }
-
-    #[test]
-    fn layer_support_valid_collection() {
-        let layers = vec!["VK_LAYER_KHRONOS_profiles", "VK_LAYER_KHRONOS_validation"];
-        assert_eq!(test_layer_support(&layers), true)
-    }
-
-    #[test]
-    fn layer_support_invalid_collection() {
-        let layers = vec!["random name", "VK_LAYER_KHRONOS_validation"];
-        assert_eq!(test_layer_support(&layers), false)
-    }
-
-    fn test_layer_support(layers_string: &Vec<&str>) -> bool{
-        let mut layers_cstring = vec![];
-        for layer_string in layers_string {
-            layers_cstring.push(CString::new(*layer_string).unwrap());
-        }
-        match Renderer::validate_setup_layers_exist(&layers_cstring, &Entry::linked()) {
-            Ok(()) => true,
-            Err(RendererError::LayerRequiredNotSupportedError) => false,
-            Err(_) => panic!("Should not happen!")
-        }
     }
 }
