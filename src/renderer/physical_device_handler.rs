@@ -35,9 +35,15 @@ pub(crate) fn get_physical_device(vulkan_instance: &Instance) -> Result<vk::Phys
 /// If any later part of the code requires support for a certain feature to be checked, do that
 /// check here.
 fn is_physical_device_suitable(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> bool {
-    let _device_properties = unsafe { vulkan_instance.get_physical_device_properties(device) };
-    let _device_features = unsafe { vulkan_instance.get_physical_device_features(device) };
-    true
+    let mut device_properties = vk::PhysicalDeviceProperties2::default();
+    unsafe { vulkan_instance.get_physical_device_properties2(device, &mut device_properties) };
+
+    let mut device_features = vk::PhysicalDeviceFeatures2::default();
+    unsafe { vulkan_instance.get_physical_device_features2(device, &mut device_features) };
+
+    let queue_family_indices = get_queue_family_indices(vulkan_instance, device);
+
+    queue_family_indices.graphics_queue_family != None
 }
 
 /// A function to rank the physical devices available
@@ -49,4 +55,35 @@ fn rank_device(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> i32 {
     } else {
         0
     }
+}
+
+/// This holds the indexes for all the queue families we will need
+struct QueueFamilyIndices {
+    graphics_queue_family: Option<usize>,
+}
+
+/// Finds the index for all the queue families we need
+fn get_queue_family_indices(vulkan_instance: &Instance, device: vk::PhysicalDevice)
+    -> QueueFamilyIndices {
+
+    let queue_families = unsafe {
+        let num_queue_families = vulkan_instance
+            .get_physical_device_queue_family_properties2_len(device);
+        let mut queue_families = vec![vk::QueueFamilyProperties2::default(); num_queue_families];
+        vulkan_instance.get_physical_device_queue_family_properties2(device, &mut queue_families);
+        queue_families
+    };
+
+    let mut found_queue_families = QueueFamilyIndices {
+        graphics_queue_family: None,
+    };
+
+    for (i, queue) in queue_families.iter().enumerate() {
+        if found_queue_families.graphics_queue_family == None &&
+            queue.queue_family_properties.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
+                found_queue_families.graphics_queue_family = Some(i);
+        }
+    }
+
+    found_queue_families
 }
