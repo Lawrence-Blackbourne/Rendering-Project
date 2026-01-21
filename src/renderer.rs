@@ -1,5 +1,5 @@
-mod physical_device_handler;
 mod debugger;
+mod device_handler;
 mod window_handler;
 
 use ash::{vk, Entry, Instance};
@@ -44,7 +44,7 @@ impl Renderer {
 
         let window = window_handler::create_window(name, &mut glfw_instance)?;
 
-        let physical_device = physical_device_handler::get_physical_device(&vulkan_instance)?;
+        let physical_device = device_handler::get_physical_device(&vulkan_instance)?;
 
         Ok(Renderer {
             _vulkan_entry: vulkan_entry,

@@ -4,7 +4,8 @@ use crate::renderer::RendererError;
 
 /// This function will return the most appropriate physical device for use, or an error if there is
 /// not an appropriate physical device.
-pub(crate) fn get_physical_device(vulkan_instance: &Instance) -> Result<vk::PhysicalDevice, RendererError> {
+pub(crate) fn get_physical_device(vulkan_instance: &Instance)
+    -> Result<vk::PhysicalDevice, RendererError> {
     let available_devices = unsafe {vulkan_instance.enumerate_physical_devices()}?;
 
     let mut suitable_devices = Vec::new();
@@ -64,7 +65,7 @@ struct QueueFamilyIndices {
 
 /// Finds the index for all the queue families we need
 fn get_queue_family_indices(vulkan_instance: &Instance, device: vk::PhysicalDevice)
-    -> QueueFamilyIndices {
+                            -> QueueFamilyIndices {
 
     let queue_families = unsafe {
         let num_queue_families = vulkan_instance
@@ -81,7 +82,7 @@ fn get_queue_family_indices(vulkan_instance: &Instance, device: vk::PhysicalDevi
     for (i, queue) in queue_families.iter().enumerate() {
         if found_queue_families.graphics_queue_family == None &&
             queue.queue_family_properties.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-                found_queue_families.graphics_queue_family = Some(i);
+            found_queue_families.graphics_queue_family = Some(i);
         }
     }
 
