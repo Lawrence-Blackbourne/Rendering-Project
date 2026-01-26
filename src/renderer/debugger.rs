@@ -10,8 +10,10 @@ const VALIDATION_EXTENSION_NAMES: &[&str] = &["VK_EXT_debug_utils"];
 
 /// Creates the main debug messenger the debugging instance to go along with it
 #[cfg(debug_assertions)]
-pub(crate) fn get_debug_messenger(vulkan_entry: &Entry, vulkan_instance: &Instance)
-    -> Result<(ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT), RendererError> {
+pub(crate) fn get_debug_messenger(
+    vulkan_entry: &Entry,
+    vulkan_instance: &Instance,
+) -> Result<(ext::debug_utils::Instance, vk::DebugUtilsMessengerEXT), RendererError> {
     let debug_instance = ext::debug_utils::Instance::new(vulkan_entry, vulkan_instance);
     let debug_messenger = unsafe {
         debug_instance.create_debug_utils_messenger(
@@ -49,8 +51,10 @@ pub(crate) fn get_setup_layer_names() -> (Vec<CString>, Vec<*const i8>) {
 }
 
 /// Validates that the layers that are passed to it are available to use.
-pub(crate) fn validate_setup_layers_exist(layer_names: &Vec<CString>, entry: &Entry)
-    -> Result<(), RendererError> {
+pub(crate) fn validate_setup_layers_exist(
+    layer_names: &Vec<CString>,
+    entry: &Entry,
+) -> Result<(), RendererError> {
     let available_layers = unsafe {
         entry.enumerate_instance_layer_properties()
     }?;
@@ -71,8 +75,9 @@ pub(crate) fn validate_setup_layers_exist(layer_names: &Vec<CString>, entry: &En
 }
 
 /// Gets the names of the extensions needed to set up the vulkan instance including debugging.
-pub(crate) fn get_setup_extension_names(glfw_instance: &Glfw)
-    -> Result<(Vec<CString>, Vec<*const i8>), RendererError> {
+pub(crate) fn get_setup_extension_names(
+    glfw_instance: &Glfw,
+) -> Result<(Vec<CString>, Vec<*const i8>), RendererError> {
 
     let mut extension_names = vec![];
 
@@ -134,8 +139,8 @@ unsafe extern "system" fn debug_messenger_callback_function(
     _severity_flags: vk::DebugUtilsMessageSeverityFlagsEXT,
     _type_flags: vk::DebugUtilsMessageTypeFlagsEXT,
     callback_data: *const vk::DebugUtilsMessengerCallbackDataEXT<'_>,
-    _user_data_pointer: *mut ffi::c_void)
-    -> u32 {
+    _user_data_pointer: *mut ffi::c_void
+) -> u32 {
 
     let data = match unsafe { callback_data.as_ref() } {
         Some(data) => data,
@@ -157,7 +162,6 @@ unsafe extern "system" fn debug_messenger_callback_function(
 
 #[cfg(test)]
 mod tests {
-    use crate::renderer::Renderer;
     use super::*;
 
     #[test]

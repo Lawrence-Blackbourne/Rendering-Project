@@ -2,7 +2,7 @@ mod debugger;
 mod device_handler;
 mod window_handler;
 
-use ash::{vk, Entry, Instance};
+use ash::{vk, Device, Entry, Instance};
 
 #[cfg(debug_assertions)]
 use ash::ext;
@@ -18,7 +18,9 @@ pub struct Renderer {
     glfw_instance: Glfw,
 
     window: glfw::PWindow,
-    physical_device: vk::PhysicalDevice,
+
+    device: Device,
+    queues: Vec<vk::Queue>,
 
     #[cfg(debug_assertions)]
     debug_messenger: vk::DebugUtilsMessengerEXT,
@@ -27,6 +29,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
+    /// Creates a new Renderer instance to use to render images
     pub fn new(name: &str) -> Result<Renderer, RendererError> {
         // These are used to call functions on.
         let vulkan_entry = Entry::linked();
@@ -35,16 +38,20 @@ impl Renderer {
         let mut glfw_instance = glfw::init_no_callbacks()?;
 
         // This is the instance that then holds all the vulkan state.
-        let vulkan_instance = Self::create_vulkan_instance(name, &vulkan_entry, &glfw_instance)?;
+        let vulkan_instance
+            = Self::create_vulkan_instance(name, &vulkan_entry, &glfw_instance)?;
 
         // This provides the permanent debug info
         #[cfg(debug_assertions)]
         let (debug_instance, debug_messenger) =
             debugger::get_debug_messenger(&vulkan_entry, &vulkan_instance)?;
 
+        // This creates the window to render to
         let window = window_handler::create_window(name, &mut glfw_instance)?;
 
-        let physical_device = device_handler::get_physical_device(&vulkan_instance)?;
+        // This gets the vulkan device to use
+        // The device is
+        let (device, queues) = device_handler::get_device(&vulkan_instance)?;
 
         Ok(Renderer {
             _vulkan_entry: vulkan_entry,
@@ -53,7 +60,8 @@ impl Renderer {
 
             window,
 
-            physical_device,
+            device,
+            queues,
 
             #[cfg(debug_assertions)]
             debug_instance,
@@ -72,8 +80,11 @@ impl Renderer {
     }
 
     /// Creates the Vulkan Instance
-    fn create_vulkan_instance(app_name: &str, vulkan_entry: &Entry, glfw_instance: &Glfw)
-        -> Result<Instance, RendererError> {
+    fn create_vulkan_instance(
+        app_name: &str,
+        vulkan_entry: &Entry,
+        glfw_instance: &Glfw,
+    ) -> Result<Instance, RendererError> {
         let app_name = CString::new(app_name)?;
 
         // This unwrap is safe as we know the string passed to it does not contain a 0 char.
@@ -89,10 +100,10 @@ impl Renderer {
 
         // We need to keep the layer names around for the pointers to have something to point to.
         // Otherwise, we get undefined behavior.
-        let (layer_names, layer_name_pointers) = debugger::get_setup_layer_names();
-        debugger::validate_setup_layers_exist(&layer_names, &vulkan_entry)?;
         let (_extension_names, extension_name_pointers) =
             debugger::get_setup_extension_names(&glfw_instance)?;
+        let (layer_names, layer_name_pointers) = debugger::get_setup_layer_names();
+        debugger::validate_setup_layers_exist(&layer_names, &vulkan_entry)?;
 
         #[cfg(debug_assertions)]
         let mut debug_messenger_info = debugger::get_debug_messenger_info();
@@ -115,8 +126,9 @@ impl Drop for Renderer {
     fn drop(&mut self) {
         #[cfg(debug_assertions)]
 
+        unsafe { self.device.destroy_device(None) };
 
-        unsafe { self.debug_instance.destroy_debug_utils_messenger(self.debug_messenger, None)}
+        unsafe { self.debug_instance.destroy_debug_utils_messenger(self.debug_messenger, None)};
 
         unsafe { self.vulkan_instance.destroy_instance(None) };
     }
@@ -136,6 +148,7 @@ pub enum RendererError {
     CStringCouleNotBeConvertedToString(ffi::IntoStringError),
     LayerRequiredNotSupportedError,
     UnableToFindSuitablePhysicalDeviceError,
+    TooManyQueuesAvailableToHandleError,
 
     LogicError(String),
     UnknownError,

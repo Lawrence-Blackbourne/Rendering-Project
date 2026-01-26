@@ -4,8 +4,9 @@ use crate::renderer::RendererError;
 
 /// This function will return the most appropriate physical device for use, or an error if there is
 /// not an appropriate physical device.
-pub(crate) fn get_physical_device(vulkan_instance: &Instance)
-    -> Result<vk::PhysicalDevice, RendererError> {
+pub(super) fn get_physical_device(
+    vulkan_instance: &Instance,
+) -> Result<vk::PhysicalDevice, RendererError> {
     let available_devices = unsafe {vulkan_instance.enumerate_physical_devices()}?;
 
     let mut suitable_devices = Vec::new();
@@ -16,7 +17,7 @@ pub(crate) fn get_physical_device(vulkan_instance: &Instance)
     }
 
     for device in available_devices {
-        if is_physical_device_suitable(vulkan_instance, device) {
+        if is_physical_device_suitable(vulkan_instance, device)? {
             suitable_devices.push(RankedDevice {
                 device,
                 score: rank_device(vulkan_instance, device),
@@ -35,16 +36,18 @@ pub(crate) fn get_physical_device(vulkan_instance: &Instance)
 /// Returns true if a physical device is suitable for our needs, and false if not.
 /// If any later part of the code requires support for a certain feature to be checked, do that
 /// check here.
-fn is_physical_device_suitable(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> bool {
+fn is_physical_device_suitable(
+    vulkan_instance: &Instance, device: vk::PhysicalDevice,
+) -> Result<bool, RendererError> {
     let mut device_properties = vk::PhysicalDeviceProperties2::default();
     unsafe { vulkan_instance.get_physical_device_properties2(device, &mut device_properties) };
 
     let mut device_features = vk::PhysicalDeviceFeatures2::default();
     unsafe { vulkan_instance.get_physical_device_features2(device, &mut device_features) };
 
-    let queue_family_indices = get_queue_family_indices(vulkan_instance, device);
+    let queue_family_indices = get_queue_family_indices(vulkan_instance, device)?;
 
-    queue_family_indices.graphics_queue_family != None
+    Ok(queue_family_indices.graphics_queue_family != None)
 }
 
 /// A function to rank the physical devices available
@@ -58,14 +61,11 @@ fn rank_device(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> i32 {
     }
 }
 
-/// This holds the indexes for all the queue families we will need
-struct QueueFamilyIndices {
-    graphics_queue_family: Option<usize>,
-}
-
 /// Finds the index for all the queue families we need
-fn get_queue_family_indices(vulkan_instance: &Instance, device: vk::PhysicalDevice)
-                            -> QueueFamilyIndices {
+pub(super) fn get_queue_family_indices(
+    vulkan_instance: &Instance,
+    device: vk::PhysicalDevice
+) -> Result<super::QueueFamilyIndices, RendererError> {
 
     let queue_families = unsafe {
         let num_queue_families = vulkan_instance
@@ -75,16 +75,20 @@ fn get_queue_family_indices(vulkan_instance: &Instance, device: vk::PhysicalDevi
         queue_families
     };
 
-    let mut found_queue_families = QueueFamilyIndices {
+    let mut found_queue_families = super::QueueFamilyIndices {
         graphics_queue_family: None,
     };
 
     for (i, queue) in queue_families.iter().enumerate() {
         if found_queue_families.graphics_queue_family == None &&
             queue.queue_family_properties.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
-            found_queue_families.graphics_queue_family = Some(i);
+            if i > u16::into(u16::MAX) {
+                return Err(RendererError::TooManyQueuesAvailableToHandleError)
+            } else {
+                found_queue_families.graphics_queue_family = Some(i as u32);
+            }
         }
     }
 
-    found_queue_families
+    Ok(found_queue_families)
 }
