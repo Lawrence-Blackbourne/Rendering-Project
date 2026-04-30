@@ -1,4 +1,9 @@
-use glfw::Glfw;
+use ash::{Instance, vk};
+
+use glfw::{self, Glfw};
+
+use std::ptr;
+
 use crate::renderer::RendererError;
 
 const WIDTH: u32 = 800;
@@ -27,4 +32,27 @@ pub(crate) fn create_window(
     };
 
     Ok(window)
+}
+
+/// This gets the window surface. This is what the final image is presented to, to render it in the
+/// window created.
+/// This is done in a platform-agnostic way in this specific implementation.
+pub(crate) fn create_window_surface(
+    vulkan_instance: &mut Instance,
+    window: &glfw::PWindow
+) -> Result<vk::SurfaceKHR, RendererError> {
+
+    let mut surface = vk::SurfaceKHR::null();
+
+    let result = unsafe {window.create_window_surface(
+        vk::Handle::as_raw(vulkan_instance.handle()) as glfw::ffi::VkInstance,
+        ptr::null(),
+        &raw mut surface as *mut glfw::ffi::VkSurfaceKHR,
+    )};
+    
+    if result == vk::Result::as_raw(vk::Result::SUCCESS) {
+        Ok(surface)
+    } else {
+        Err(RendererError::from(vk::Result::from_raw(result)))
+    }
 }

@@ -2,7 +2,7 @@ mod debugger;
 mod device_handler;
 mod window_handler;
 
-use ash::{vk, Device, Entry, Instance};
+use ash::{vk, khr, Device, Entry, Instance};
 
 #[cfg(debug_assertions)]
 use ash::ext;
@@ -18,14 +18,16 @@ pub struct Renderer {
     glfw_instance: Glfw,
 
     window: glfw::PWindow,
+    surface_instance: khr::surface::Instance,
+    surface: vk::SurfaceKHR,
 
     device: Device,
-    queues: Vec<vk::Queue>,
+    _queues: Vec<vk::Queue>,
 
     #[cfg(debug_assertions)]
-    debug_messenger: vk::DebugUtilsMessengerEXT,
-    #[cfg(debug_assertions)]
     debug_instance: ext::debug_utils::Instance,
+    #[cfg(debug_assertions)]
+    debug_messenger: vk::DebugUtilsMessengerEXT,
 }
 
 impl Renderer {
@@ -38,7 +40,7 @@ impl Renderer {
         let mut glfw_instance = glfw::init_no_callbacks()?;
 
         // This is the instance that then holds all the vulkan state.
-        let vulkan_instance
+        let mut vulkan_instance
             = Self::create_vulkan_instance(name, &vulkan_entry, &glfw_instance)?;
 
         // This provides the permanent debug info
@@ -48,10 +50,15 @@ impl Renderer {
 
         // This creates the window to render to
         let window = window_handler::create_window(name, &mut glfw_instance)?;
+        let surface = window_handler::create_window_surface(&mut vulkan_instance, &window)?;
+        let surface_instance = khr::surface::Instance::new(&vulkan_entry, &vulkan_instance);
 
-        // This gets the vulkan device to use
+        // This gets the Vulkan device to use
         // The device is
-        let (device, queues) = device_handler::get_device(&vulkan_instance)?;
+        let (device, queues) = device_handler::get_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface)?;
 
         Ok(Renderer {
             _vulkan_entry: vulkan_entry,
@@ -59,9 +66,11 @@ impl Renderer {
             glfw_instance,
 
             window,
+            surface_instance,
+            surface,
 
             device,
-            queues,
+            _queues: queues,
 
             #[cfg(debug_assertions)]
             debug_instance,
@@ -100,7 +109,7 @@ impl Renderer {
 
         // We need to keep the layer names around for the pointers to have something to point to.
         // Otherwise, we get undefined behavior.
-        let (_extension_names, extension_name_pointers) =
+        let (_debug_extension_names, debug_extension_name_pointers) =
             debugger::get_setup_extension_names(&glfw_instance)?;
         let (layer_names, layer_name_pointers) = debugger::get_setup_layer_names();
         debugger::validate_setup_layers_exist(&layer_names, &vulkan_entry)?;
@@ -112,7 +121,7 @@ impl Renderer {
             .flags(vk::InstanceCreateFlags::empty())
             .application_info(&app_info)
             .enabled_layer_names(&layer_name_pointers)
-            .enabled_extension_names(&extension_name_pointers);
+            .enabled_extension_names(&debug_extension_name_pointers);
 
         // This provides the temporary debug info
         #[cfg(debug_assertions)]
@@ -128,6 +137,9 @@ impl Drop for Renderer {
 
         unsafe { self.device.destroy_device(None) };
 
+        unsafe { self.surface_instance.destroy_surface(self.surface, None)}
+
+        #[cfg(debug_assertions)]
         unsafe { self.debug_instance.destroy_debug_utils_messenger(self.debug_messenger, None)};
 
         unsafe { self.vulkan_instance.destroy_instance(None) };
