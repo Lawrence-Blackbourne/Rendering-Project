@@ -1,7 +1,5 @@
 use ash::{vk, khr, Device, Instance};
-
 use super::QueueFamilyIndices;
-
 use crate::renderer::RendererError;
 
 /// This creates the logical device from the physical device.

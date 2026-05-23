@@ -3,9 +3,7 @@ mod logical_device_handler;
 mod queue_handler;
 
 use ash::{vk, khr, Device, Instance};
-
 use std::ffi::CStr;
-
 use crate::renderer::RendererError;
 
 const DEVICE_EXTENSION_NAMES: [&CStr; 1] = [khr::swapchain::NAME];
@@ -16,6 +14,7 @@ pub(crate) fn get_device(
     vulkan_instance: &Instance,
     surface_instance: &khr::surface::Instance,
     surface: vk::SurfaceKHR,
+    num_swap_frames: u8,
 ) -> Result<(Device, Vec<vk::Queue>), RendererError> {
     let physical_device = physical_device_handler::get_physical_device(
         vulkan_instance,
@@ -54,8 +53,8 @@ impl QueueFamilyIndices {
 }
 
 /// This stores the details about what surface information is supported
-struct DisplayInfo {
-    capabilities: vk::SurfaceCapabilitiesKHR,
-    formats: Vec<vk::SurfaceFormatKHR>,
-    presentation_modes: Vec<vk::PresentModeKHR>,
+pub(super) struct DisplayInfo {
+    pub capabilities: vk::SurfaceCapabilitiesKHR,
+    pub formats: Vec<vk::SurfaceFormatKHR>,
+    pub presentation_modes: Vec<vk::PresentModeKHR>,
 }

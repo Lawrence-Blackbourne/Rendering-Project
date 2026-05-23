@@ -1,8 +1,7 @@
-mod renderer;
+use rendering_project::{self, renderer};
 
 fn main() {
-    let result = renderer::Renderer::new("test");
-    let mut renderer = match result {
+    let mut renderer = match rendering_project::get_renderer("test", 2) {
         Ok(renderer) => renderer,
         Err(e) => panic!("Error occurred!: {:?}", e)
     };
@@ -22,4 +21,5 @@ fn main() {
             }
         }
     }
+    println!("Done")
 }

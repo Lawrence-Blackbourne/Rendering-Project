@@ -1,9 +1,6 @@
 use ash::{Instance, vk};
-
 use glfw::{self, Glfw};
-
 use std::ptr;
-
 use crate::renderer::RendererError;
 
 const WIDTH: u32 = 800;

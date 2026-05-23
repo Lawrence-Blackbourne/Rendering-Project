@@ -1,7 +1,5 @@
 use ash::{vk::{self, Queue}, khr, Device, Instance};
-
 use super::QueueFamilyIndices;
-
 use crate::renderer::RendererError;
 
 /// This function gets the queues from the physical device

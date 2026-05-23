@@ -1,10 +1,7 @@
 use ash::{vk, khr, Instance};
-
-use std::ffi::CStr;
-
 use super::QueueFamilyIndices;
-
-use crate::renderer::RendererError;
+use crate::{renderer::RendererError,
+            string_handler::char_array_to_cstr};
 
 /// This function will return the most appropriate physical device for use, or an error if there is
 /// not an appropriate physical device.
@@ -138,7 +135,7 @@ fn check_device_extension_support(vulkan_instance: &Instance, device: vk::Physic
     for needed_extension in super::DEVICE_EXTENSION_NAMES{
         let mut available = false;
         for available_extension in &available_extensions {
-            let name = unsafe{CStr::from_ptr(available_extension.extension_name.as_ptr())};
+            let name = unsafe{char_array_to_cstr(&available_extension.extension_name)};
             if name == needed_extension {
                 available = true;
             }

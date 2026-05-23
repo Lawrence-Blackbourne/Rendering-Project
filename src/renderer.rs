@@ -1,15 +1,16 @@
 mod debugger;
 mod device_handler;
 mod window_handler;
+mod swapchain_handler;
 
 use ash::{vk, khr, Device, Entry, Instance};
-
 #[cfg(debug_assertions)]
 use ash::ext;
-
 use glfw::{self, Glfw};
+use std::ffi::{NulError};
 
-use std::ffi::{self, CString};
+use crate::string_handler::{convert_to_cstring,
+                            string_vector_to_char_vector};
 
 pub struct Renderer {
     _vulkan_entry: Entry,
@@ -32,7 +33,7 @@ pub struct Renderer {
 
 impl Renderer {
     /// Creates a new Renderer instance to use to render images
-    pub fn new(name: &str) -> Result<Renderer, RendererError> {
+    pub fn new(name: &str, num_swap_frames: u8) -> Result<Renderer, RendererError> {
         // These are used to call functions on.
         let vulkan_entry = Entry::linked();
 
@@ -58,7 +59,8 @@ impl Renderer {
         let (device, queues) = device_handler::get_device(
             &vulkan_instance,
             &surface_instance,
-            surface)?;
+            surface,
+            num_swap_frames)?;
 
         Ok(Renderer {
             _vulkan_entry: vulkan_entry,
@@ -94,11 +96,9 @@ impl Renderer {
         vulkan_entry: &Entry,
         glfw_instance: &Glfw,
     ) -> Result<Instance, RendererError> {
-        let app_name = CString::new(app_name)?;
+        let app_name = convert_to_cstring(app_name)?;
 
-        // This unwrap is safe as we know the string passed to it does not contain a 0 char.
-        let engine_name = CString::new("Vulkan Engine")
-            .expect("Hard coded string should not contain any 0 chars except at end");
+        let engine_name = convert_to_cstring("Vulkan Engine")?;
 
         let app_info = vk::ApplicationInfo::default()
             .application_name(app_name.as_c_str())
@@ -107,12 +107,11 @@ impl Renderer {
             .engine_version(vk::make_api_version(0, 0, 1, 0))
             .api_version(vk::make_api_version(0, 1, 3, 0));
 
-        // We need to keep the layer names around for the pointers to have something to point to.
-        // Otherwise, we get undefined behavior.
-        let (_debug_extension_names, debug_extension_name_pointers) =
-            debugger::get_setup_extension_names(&glfw_instance)?;
-        let (layer_names, layer_name_pointers) = debugger::get_setup_layer_names();
+        let debug_extension_names = debugger::get_setup_extension_names(&glfw_instance)?;
+        let layer_names = debugger::get_setup_layer_names();
         debugger::validate_setup_layers_exist(&layer_names, &vulkan_entry)?;
+        let debug_extension_pointers = string_vector_to_char_vector(&debug_extension_names)?;
+        let layer_pointers = string_vector_to_char_vector(&layer_names)?;
 
         #[cfg(debug_assertions)]
         let mut debug_messenger_info = debugger::get_debug_messenger_info();
@@ -120,8 +119,8 @@ impl Renderer {
         let create_info = vk::InstanceCreateInfo::default()
             .flags(vk::InstanceCreateFlags::empty())
             .application_info(&app_info)
-            .enabled_layer_names(&layer_name_pointers)
-            .enabled_extension_names(&debug_extension_name_pointers);
+            .enabled_layer_names(&layer_pointers.chars)
+            .enabled_extension_names(&debug_extension_pointers.chars);
 
         // This provides the temporary debug info
         #[cfg(debug_assertions)]
@@ -155,12 +154,14 @@ pub enum RendererStatus {
 #[derive(Debug)]
 #[derive(Eq, PartialEq)]
 pub enum RendererError {
-    StringContainingNullCharError(ffi::NulError),
+    StringContainingNullCharError(NulError),
     CStringDidNotContainTerminatingNullButeError,
-    CStringCouleNotBeConvertedToString(ffi::IntoStringError),
+    //CStringCouleNotBeConvertedToString(ffi::IntoStringError),
+
     LayerRequiredNotSupportedError,
     UnableToFindSuitablePhysicalDeviceError,
     TooManyQueuesAvailableToHandleError,
+    ImageCountNotAvailableError(u8, u8), // Stores the min and max available image count
 
     LogicError(String),
     UnknownError,
@@ -208,24 +209,6 @@ pub enum RendererError {
     GlfwEntryAlreadyExists,
     GlfwEntryCreationInternalError,
     GlfwCallFailed(String),
-}
-
-impl From<ffi::NulError> for RendererError {
-    fn from(error: ffi::NulError) -> Self {
-        RendererError::StringContainingNullCharError(error)
-    }
-}
-
-impl From<ffi::FromBytesUntilNulError> for RendererError {
-    fn from(_: ffi::FromBytesUntilNulError) -> Self {
-        RendererError::CStringDidNotContainTerminatingNullButeError
-    }
-}
-
-impl From<ffi::IntoStringError> for RendererError {
-    fn from(error: ffi::IntoStringError) -> Self {
-        RendererError::CStringCouleNotBeConvertedToString(error)
-    }
 }
 
 impl From<vk::Result> for RendererError {
@@ -359,6 +342,6 @@ mod tests {
     #[test]
     fn can_create_renderer() {
         println!("TEST");
-        Renderer::new("test").unwrap();
+        Renderer::new("test", 2).unwrap();
     }
 }
