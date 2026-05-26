@@ -15,7 +15,8 @@ pub fn string_to_cstring(str: &String) -> Result<CString, RendererError> {
 }
 
 /// Converts a character array to a CStr
-pub unsafe fn char_array_to_cstr(array: &[c_char; 256]) -> &CStr {
+/// The array must have a valid nul terminator at the end
+pub unsafe fn char_array_to_cstr(array: &[c_char]) -> &CStr {
     unsafe {CStr::from_ptr(array.as_ptr())}
 }
 
@@ -49,5 +50,60 @@ impl From<ffi::NulError> for RendererError {
 impl From<ffi::FromBytesUntilNulError> for RendererError {
     fn from(_: ffi::FromBytesUntilNulError) -> Self {
         RendererError::CStringDidNotContainTerminatingNullButeError
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn convert_empty_str_to_cstring() {
+        assert_eq!(convert_to_cstring("").unwrap(), CString::new("").unwrap());
+    }
+
+    #[test]
+    fn convert_valid_str_to_cstring() {
+        assert_eq!(convert_to_cstring("Hello World!").unwrap(),
+                   CString::new("Hello World!").unwrap());
+    }
+
+    #[test]
+    fn convert_invalid_str_to_cstring() {
+        assert!(convert_to_cstring("Hello\0World!").is_err());
+    }
+
+    #[test]
+    fn convert_empty_string_to_cstring() {
+        assert_eq!(string_to_cstring(&String::from("")).unwrap(), CString::new("").unwrap());
+    }
+
+    #[test]
+    fn convert_valid_string_to_cstring() {
+        assert_eq!(string_to_cstring(&String::from("Hello World!")).unwrap(),
+                   CString::new("Hello World!").unwrap());
+    }
+
+    #[test]
+    fn convert_invalid_string_to_cstring() {
+        assert!(string_to_cstring(&String::from("Hello\0World!")).is_err());
+    }
+
+    #[test]
+    fn convert_empty_char_array_to_cstring() {
+        unsafe{ assert_eq!(char_array_to_cstr(&[]), CString::new("").unwrap().as_c_str()); }
+    }
+
+    #[test]
+    fn convert_valid_char_array_to_cstring() {
+        let text = b"Hello World!";
+        let mut c_char_text = Vec::new();
+        for char in text {
+            c_char_text.push(*char as c_char)
+        }
+        let c_char_array: [c_char; 12] = c_char_text.try_into().unwrap();
+
+        unsafe { assert_eq!(char_array_to_cstr(&c_char_array),
+                            CString::new("Hello World!").unwrap().as_c_str()) }
     }
 }
