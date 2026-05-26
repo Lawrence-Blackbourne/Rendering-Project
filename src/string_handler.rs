@@ -91,7 +91,10 @@ mod tests {
 
     #[test]
     fn convert_empty_char_array_to_cstring() {
-        unsafe{ assert_eq!(char_array_to_cstr(&[]), CString::new("").unwrap().as_c_str()); }
+        let c_char_text = Vec::new();
+        let c_char_array: [c_char; 0] = c_char_text.try_into().unwrap();
+        unsafe{ assert_eq!(char_array_to_cstr(&c_char_array),
+                           CString::new("").unwrap().as_c_str()); }
     }
 
     #[test]
