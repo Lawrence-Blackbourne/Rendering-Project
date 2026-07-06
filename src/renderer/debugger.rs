@@ -1,8 +1,9 @@
 use ash::{ext, vk, Entry, Instance};
 use glfw::Glfw;
-use std::{ops::BitOr,
+use std::{ffi::c_void,
+          ops::BitOr,
           ptr,
-          ffi::c_void};
+          sync::{Mutex, MutexGuard}};
 use crate::{renderer::RendererError,
             string_handler::convert_to_cstring};
 
@@ -101,7 +102,7 @@ pub(crate) fn get_setup_extension_names(
     Ok(extension_names)
 }
 
-/// Sets up the debug messenger extension.
+/// Sets up the debug messenger extension
 pub(crate) fn get_debug_messenger_info() -> vk::DebugUtilsMessengerCreateInfoEXT<'static> {
     // We want warnings and errors but not verbose diagnostic messages
     let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
@@ -119,6 +120,19 @@ pub(crate) fn get_debug_messenger_info() -> vk::DebugUtilsMessengerCreateInfoEXT
         .user_data(ptr::null_mut());
 
     debug_messenger_info
+}
+
+/// A Mutex used for ensuring tests that use the rendering libraries do not run in parallel
+static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+/// Returns the unwrapped TEST_MUTEX
+/// A Poisoned Mutex will just be reset to attempt running the tests anyway
+/// Worst case the tests fail anyway, and we know the state in the mutex is fine as it is just ()
+pub(crate) fn get_test_mutex_guard() -> MutexGuard<'static, ()>{
+    if Mutex::is_poisoned(&TEST_MUTEX) {
+        Mutex::clear_poison(&TEST_MUTEX);
+    }
+    TEST_MUTEX.lock().unwrap()
 }
 
 #[unsafe(no_mangle)]
@@ -183,6 +197,7 @@ mod tests {
     }
 
     fn test_layer_support(layers_string: &Vec<String>) -> bool {
+        let _guard = get_test_mutex_guard();
         match validate_setup_layers_exist(&layers_string, &Entry::linked()) {
             Ok(()) => true,
             Err(RendererError::LayerRequiredNotSupportedError) => false,

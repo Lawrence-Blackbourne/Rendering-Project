@@ -145,14 +145,14 @@ impl Drop for Renderer {
     }
 }
 
+#[derive(Debug, Eq, PartialEq)]
 pub enum RendererStatus {
     Ok,
     ShouldClose,
     _Error(RendererError),
 }
 
-#[derive(Debug)]
-#[derive(Eq, PartialEq)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum RendererError {
     StringContainingNullCharError(NulError),
     CStringDidNotContainTerminatingNullButeError,
@@ -341,7 +341,22 @@ mod tests {
 
     #[test]
     fn can_create_renderer() {
-        println!("TEST");
+        let _guard = debugger::get_test_mutex_guard();
         Renderer::new("test", 2).unwrap();
+    }
+
+    #[test]
+    fn can_destroy_renderer() {
+        let _guard = debugger::get_test_mutex_guard();
+        let renderer = Renderer::new("test", 2).unwrap();
+        drop(renderer);
+    }
+
+    #[test]
+    fn can_do_empty_frame_update() {
+        let _guard = debugger::get_test_mutex_guard();
+        let mut renderer = Renderer::new("test", 2).unwrap();
+        let result = renderer.update();
+        assert_eq!(result, RendererStatus::Ok)
     }
 }
