@@ -122,19 +122,6 @@ pub(crate) fn get_debug_messenger_info() -> vk::DebugUtilsMessengerCreateInfoEXT
     debug_messenger_info
 }
 
-/// A Mutex used for ensuring tests that use the rendering libraries do not run in parallel
-static TEST_MUTEX: Mutex<()> = Mutex::new(());
-
-/// Returns the unwrapped TEST_MUTEX
-/// A Poisoned Mutex will just be reset to attempt running the tests anyway
-/// Worst case the tests fail anyway, and we know the state in the mutex is fine as it is just ()
-pub(crate) fn get_test_mutex_guard() -> MutexGuard<'static, ()>{
-    if Mutex::is_poisoned(&TEST_MUTEX) {
-        Mutex::clear_poison(&TEST_MUTEX);
-    }
-    TEST_MUTEX.lock().unwrap()
-}
-
 #[unsafe(no_mangle)]
 unsafe extern "system" fn debug_messenger_callback_function(
     _severity_flags: vk::DebugUtilsMessageSeverityFlagsEXT,
@@ -162,7 +149,7 @@ unsafe extern "system" fn debug_messenger_callback_function(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
 
     #[test]
@@ -194,6 +181,32 @@ mod tests {
     fn layer_support_invalid_collection() {
         let layers = vec![String::from("random name"), String::from("VK_LAYER_KHRONOS_validation")];
         assert_eq!(test_layer_support(&layers), false)
+    }
+
+    /// A Mutex used for ensuring tests that use the rendering libraries do not run in parallel
+    static TEST_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Returns the unwrapped TEST_MUTEX
+    /// A Poisoned Mutex will just be reset to attempt running the tests anyway
+    /// Worst case the tests fail anyway, and we know the state in the mutex is fine as it is just ()
+    pub(crate) fn get_test_mutex_guard() -> MutexGuard<'static, ()>{
+        if Mutex::is_poisoned(&TEST_MUTEX) {
+            Mutex::clear_poison(&TEST_MUTEX);
+        }
+        TEST_MUTEX.lock().unwrap()
+    }
+
+    /// Returns a vulkan entry and a GLFW entry for running tests
+    pub(crate) fn get_entries() -> (MutexGuard<'static, ()>, Entry, Glfw) {
+        let guard = get_test_mutex_guard();
+        let entry = Entry::linked();
+        let glfw = glfw::init_no_callbacks().expect("Failed to get a GLFW entry");
+        (guard, entry, glfw)
+    }
+
+    /// Returns a vulkan instance for running tests
+    pub(crate) fn get_vulkan_instance(vulkan_entry: &Entry, glfw_instance: &Glfw) -> Instance {
+        super::super::Renderer::create_vulkan_instance("test", vulkan_entry, glfw_instance).unwrap()
     }
 
     fn test_layer_support(layers_string: &Vec<String>) -> bool {

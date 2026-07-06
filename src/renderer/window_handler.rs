@@ -53,3 +53,29 @@ pub(crate) fn create_window_surface(
         Err(RendererError::from(vk::Result::from_raw(result)))
     }
 }
+
+#[cfg(test)]
+mod test{
+    use super::*;
+    use crate::renderer::debugger::tests;
+
+    #[test]
+    fn can_create_window() {
+        let (_guard, _, mut glfw_instance) = tests::get_entries();
+        match create_window("test", &mut glfw_instance) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+    
+    #[test]
+    fn can_create_window_surface() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let window = create_window("test", &mut glfw_instance).unwrap();
+        let mut instance = tests::get_vulkan_instance(& vulkan_entry, & glfw_instance);
+        match create_window_surface(&mut instance, & window) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+}
