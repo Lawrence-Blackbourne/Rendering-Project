@@ -54,7 +54,8 @@ pub(crate) fn validate_setup_layers_exist(
     for layer_name in layer_names {
         let mut layer_exists = false;
         for available_layer in available_layers.iter() {
-            if convert_to_cstring(layer_name.as_str())? == available_layer.layer_name_as_c_str()? {
+            if convert_to_cstring(layer_name.as_str())? ==
+                available_layer.layer_name_as_c_str()?.to_owned() {
                 layer_exists = true;
                 break;
             }
