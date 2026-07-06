@@ -1,4 +1,4 @@
-mod debugger;
+pub(crate) mod debugger;
 mod device_handler;
 mod window_handler;
 mod swapchain_handler;
