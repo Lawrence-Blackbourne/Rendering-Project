@@ -11,6 +11,15 @@ mod tests{
     use crate::renderer::debugger::tests;
 
     #[test]
+    fn cannot_get_renderer_with_0_frames() {
+        let _guard = tests::get_test_mutex_guard();
+        match get_renderer("test", 0) {
+            Ok(_) => panic!("Renderer created with no frames"),
+            Err(_) => (),
+        }
+    }
+
+    #[test]
     fn can_get_renderer_with_1_frame() {
         let _guard = tests::get_test_mutex_guard();
         match get_renderer("test", 1) {
@@ -34,15 +43,6 @@ mod tests{
         match get_renderer("test", 3) {
             Ok(_) => (),
             Err(e) => panic!("{e:?}"),
-        }
-    }
-
-    #[test]
-    fn cannot_get_renderer_with_0_frames() {
-        let _guard = tests::get_test_mutex_guard();
-        match get_renderer("test", 0) {
-            Ok(_) => panic!("Renderer created with no frames"),
-            Err(_) => (),
         }
     }
 }

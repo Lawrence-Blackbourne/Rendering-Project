@@ -153,6 +153,26 @@ pub(crate) mod tests {
     use super::*;
 
     #[test]
+    fn can_get_debug_messenger() {
+        let (_guard, vulkan_entry, glfw_instance) = get_entries();
+        let vulkan_instance = get_vulkan_instance(& vulkan_entry, & glfw_instance);
+        match get_debug_messenger(&vulkan_entry, &vulkan_instance) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn can_get_setup_layer_names() {
+        get_setup_layer_names();
+    }
+
+    #[test]
+    fn setup_layer_names_not_empty() {
+        assert_ne!(get_setup_layer_names().len(), 0);
+    }
+
+    #[test]
     fn layer_support_no_layers() {
         let layers = vec![];
         assert_eq!(test_layer_support(&layers), true)
@@ -183,6 +203,21 @@ pub(crate) mod tests {
         assert_eq!(test_layer_support(&layers), false)
     }
 
+    #[test]
+    fn can_get_setup_extension_names() {
+        let (_guard, _, glfw_instance) = get_entries();
+        match get_setup_extension_names(& glfw_instance) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn setup_extension_names_not_empty() {
+        let (_guard, _, glfw_instance) = get_entries();
+        assert_ne!(get_setup_extension_names(& glfw_instance).unwrap().len(), 0);
+    }
+
     /// A Mutex used for ensuring tests that use the rendering libraries do not run in parallel
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -190,10 +225,14 @@ pub(crate) mod tests {
     /// A Poisoned Mutex will just be reset to attempt running the tests anyway
     /// Worst case the tests fail anyway, and we know the state in the mutex is fine as it is just ()
     pub(crate) fn get_test_mutex_guard() -> MutexGuard<'static, ()>{
-        if Mutex::is_poisoned(&TEST_MUTEX) {
-            Mutex::clear_poison(&TEST_MUTEX);
+        match TEST_MUTEX.lock() {
+            Ok(m) => m,
+            Err(e) => {
+                Mutex::clear_poison(&TEST_MUTEX);
+                e.into_inner()
+            }
         }
-        TEST_MUTEX.lock().unwrap()
+
     }
 
     /// Returns a vulkan entry and a GLFW entry for running tests

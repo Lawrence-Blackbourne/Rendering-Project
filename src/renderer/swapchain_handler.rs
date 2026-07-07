@@ -38,3 +38,5 @@ fn get_swapchain_settings(info: DisplayInfo, desired_image_count: u8) -> Result<
 
     panic!();
 }
+
+//TODO finish and create tests
