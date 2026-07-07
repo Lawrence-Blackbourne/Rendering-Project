@@ -216,4 +216,132 @@ mod tests {
             Err(e) => panic!("{e:?}"),
         }
     }
+
+    #[test]
+    fn physical_device_is_suitable() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface
+        ).unwrap();
+        match is_physical_device_suitable(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+            physical_device,
+        ) {
+            Ok(true) => (),
+            Ok(false) => panic!("Physical device not suitable!"),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn can_get_device_queue_indices() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface
+        ).unwrap();
+        match get_queue_family_indices(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+            physical_device,
+        ) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn device_queue_indices_all_valid() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface
+        ).unwrap();
+        let indices = get_queue_family_indices(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+            physical_device,
+        ).unwrap();
+        for index in indices.queue_family_indices {
+            if index == None {
+                panic!("Empty queue family index for chosen physical device")
+            }
+        }
+    }
+
+    #[test]
+    fn device_had_extension_support() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface
+        ).unwrap();
+        match check_device_extension_support(&vulkan_instance, physical_device) {
+            Ok(true) => (),
+            Ok(false) => panic!("Physical device not suitable!"),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn can_get_device_display_info() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface
+        ).unwrap();
+        match get_device_display_info(&surface_instance, physical_device, surface) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn device_has_display_capabilities() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface
+        ).unwrap();
+        match check_device_display_capabilities(&surface_instance, physical_device, surface) {
+            Ok(true) => (),
+            Ok(false) => panic!("Physical device does not have required display capabilities!"),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
 }
