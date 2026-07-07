@@ -1,7 +1,7 @@
 use ash::{vk, khr, Instance};
 use super::QueueFamilyIndices;
 use crate::{renderer::RendererError,
-            string_handler::char_array_to_cstr};
+            string_handler};
 
 /// This function will return the most appropriate physical device for use, or an error if there is
 /// not an appropriate physical device.
@@ -135,7 +135,9 @@ fn check_device_extension_support(vulkan_instance: &Instance, device: vk::Physic
     for needed_extension in super::DEVICE_EXTENSION_NAMES{
         let mut available = false;
         for available_extension in &available_extensions {
-            let name = unsafe{char_array_to_cstr(&available_extension.extension_name)};
+            let name = unsafe{
+                string_handler::char_array_to_cstr(&available_extension.extension_name)
+            };
             if name == needed_extension {
                 available = true;
             }
@@ -188,10 +190,32 @@ fn get_device_display_info(
 fn check_device_display_capabilities(
     surface_instance: &khr::surface::Instance,
     device: vk::PhysicalDevice,
-    surface: vk::SurfaceKHR,)
-    -> Result<bool, RendererError> {
+    surface: vk::SurfaceKHR,
+) -> Result<bool, RendererError> {
 
     let display_info = get_device_display_info(surface_instance, device, surface)?;
 
     Ok(!display_info.formats.is_empty() && !display_info.presentation_modes.is_empty())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::renderer::debugger::tests;
+
+    // This test will also fail on any device that is not suitable for the program to be run on
+    #[test]
+    fn can_get_physical_device() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        match get_physical_device(&vulkan_instance, &surface_instance, surface) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+
 }
