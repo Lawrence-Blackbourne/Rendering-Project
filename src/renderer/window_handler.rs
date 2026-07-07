@@ -71,8 +71,8 @@ mod test{
     #[test]
     fn can_create_window_surface() {
         let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
-        let window = create_window("test", &mut glfw_instance).unwrap();
         let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, & glfw_instance);
+        let window = create_window("test", &mut glfw_instance).unwrap();
         match create_window_surface(&mut vulkan_instance, & window) {
             Ok(_) => (),
             Err(e) => panic!("{e:?}"),

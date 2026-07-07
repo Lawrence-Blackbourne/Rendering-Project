@@ -12,7 +12,7 @@ mod tests{
 
     #[test]
     fn cannot_get_renderer_with_0_frames() {
-        let _guard = tests::get_test_mutex_guard();
+        let (_guard, _, _) = tests::get_entries();
         match get_renderer("test", 0) {
             Ok(_) => panic!("Renderer created with no frames"),
             Err(_) => (),
@@ -21,7 +21,7 @@ mod tests{
 
     #[test]
     fn can_get_renderer_with_1_frame() {
-        let _guard = tests::get_test_mutex_guard();
+        let (_guard, _, _) = tests::get_entries();
         match get_renderer("test", 1) {
             Ok(_) => (),
             Err(e) => panic!("{e:?}"),
@@ -30,7 +30,7 @@ mod tests{
 
     #[test]
     fn can_get_renderer_with_2_frames() {
-        let _guard = tests::get_test_mutex_guard();
+        let (_guard, _, _) = tests::get_entries();
         match get_renderer("test", 2) {
             Ok(_) => (),
             Err(e) => panic!("{e:?}"),
@@ -39,7 +39,7 @@ mod tests{
 
     #[test]
     fn can_get_renderer_with_3_frames() {
-        let _guard = tests::get_test_mutex_guard();
+        let (_guard, _, _) = tests::get_entries();
         match get_renderer("test", 3) {
             Ok(_) => (),
             Err(e) => panic!("{e:?}"),

@@ -342,20 +342,21 @@ mod tests {
 
     #[test]
     fn can_create_renderer() {
-        let _guard = tests::get_test_mutex_guard();
+        
+        let (_guard, _, _) = tests::get_entries();
         Renderer::new("test", 2).unwrap();
     }
 
     #[test]
     fn can_destroy_renderer() {
-        let _guard = tests::get_test_mutex_guard();
+        let (_guard, _, _) = tests::get_entries();
         let renderer = Renderer::new("test", 2).unwrap();
         drop(renderer);
     }
 
     #[test]
     fn can_do_empty_frame_update() {
-        let _guard = tests::get_test_mutex_guard();
+        let (_guard, _, _) = tests::get_entries();
         let mut renderer = Renderer::new("test", 2).unwrap();
         let result = renderer.update();
         assert_eq!(result, RendererStatus::Ok)
