@@ -66,5 +66,72 @@ fn get_queue_create_infos(
         queues.push(queue);
     }
 
+    println!("{queues:?}");
+    println!("{queue_indices:?}");
+
     Ok(queues)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::renderer::{debugger::tests,
+                          device_handler};
+
+    #[test]
+    fn can_get_logical_device() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = device_handler::tests::get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+        );
+        match get_logical_device(
+            &vulkan_instance,
+            physical_device,
+            &surface_instance,
+            surface
+        ) {
+            Ok(_) => (),
+            Err(e) => panic!("{e:?}"),
+        }
+    }
+
+    #[test]
+    fn can_get_queue_create_infos() {
+        get_test_queue_create_infos();
+    }
+
+    #[inline(never)]
+    #[test]
+    fn queue_create_infos_correct_size() {
+        let queues = get_test_queue_create_infos();
+        println!("Test");
+        println!("{queues:?}");
+        assert!(get_test_queue_create_infos().len() < super::super::NUM_QUEUE_FAMILIES)
+    }
+
+    fn get_test_queue_create_infos() -> Vec<vk::DeviceQueueCreateInfo<'static>>{
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(& vulkan_entry, &glfw_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let physical_device = super::super::physical_device_handler::get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+        ).unwrap();
+        let queue_family_indices = super::super::physical_device_handler::get_queue_family_indices(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+            physical_device,
+        ).unwrap();
+        get_queue_create_infos(queue_family_indices).unwrap()
+    }
 }

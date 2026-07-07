@@ -40,6 +40,7 @@ pub(crate) fn get_device(
 }
 
 // If updating, remember to update get_queue_create_infos in logical_device_handler
+#[derive(Debug)]
 struct QueueFamilyIndices {
     //This stores all the queue families
     queue_family_indices: [Option<u32>; NUM_QUEUE_FAMILIES],
