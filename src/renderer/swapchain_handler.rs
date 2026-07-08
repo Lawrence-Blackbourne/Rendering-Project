@@ -1,5 +1,5 @@
 use ash::vk;
-use super::device_handler::DisplayInfo;
+use super::device_handler::info_handler;
 use crate::renderer::RendererError;
 
 /// Stores the settings needed to create the swapchain
@@ -11,7 +11,10 @@ struct SwapchainSettings {
 }
 
 /// Takes in the capabilities of the device and then chooses the setting for the swapchain
-fn get_swapchain_settings(info: DisplayInfo, desired_image_count: u8) -> Result<SwapchainSettings, RendererError> {
+fn get_swapchain_settings(
+    info: info_handler::InternalDisplayInfo,
+    desired_image_count: u8,
+) -> Result<SwapchainSettings, RendererError> {
 
     let mut desired_format = None;
     const PREFERRED_FORMAT: vk::Format = vk::Format::R8G8B8A8_SRGB;

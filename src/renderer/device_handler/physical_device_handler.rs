@@ -1,5 +1,5 @@
 use ash::{vk, khr, Instance};
-use super::QueueFamilyIndices;
+use super::{info_handler, QueueFamilyIndices};
 use crate::{renderer::RendererError,
             string_handler};
 
@@ -151,6 +151,7 @@ fn check_device_extension_support(vulkan_instance: &Instance, device: vk::Physic
 
 /// A function to rank the physical devices available
 /// Right now it just gives all dedicated GPUs a score of 1 and other GPUs a score of 0;
+/// TODO figure out a way to allow the user to select what physical device to use
 fn rank_device(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> i32 {
     let device_properties = unsafe { vulkan_instance.get_physical_device_properties(device) };
     if device_properties.device_type == vk::PhysicalDeviceType::DISCRETE_GPU {
@@ -164,7 +165,7 @@ fn get_device_display_info(
     surface_instance: &khr::surface::Instance,
     device: vk::PhysicalDevice,
     surface: vk::SurfaceKHR)
-    -> Result<super::DisplayInfo, RendererError> {
+    -> Result<info_handler::InternalDisplayInfo, RendererError> {
 
     let surface_capabilities = unsafe{
         surface_instance.get_physical_device_surface_capabilities(device, surface)
@@ -178,7 +179,7 @@ fn get_device_display_info(
         surface_instance.get_physical_device_surface_present_modes(device, surface)
     }?;
 
-    Ok(super::DisplayInfo{
+    Ok(info_handler::InternalDisplayInfo{
         capabilities: surface_capabilities,
         formats: surface_formats,
         presentation_modes: surface_presentation_modes,

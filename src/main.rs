@@ -15,7 +15,7 @@ fn main() {
                 false
             },
             renderer::RendererStatus::ShouldClose => true,
-            renderer::RendererStatus::_Error(e) => {
+            renderer::RendererStatus::Error(e) => {
                 println!("Error occurred!: {:?}", e);
                 true
             }
