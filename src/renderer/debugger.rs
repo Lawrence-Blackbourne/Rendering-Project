@@ -10,7 +10,7 @@ use crate::{renderer::RendererError,
 const VALIDATION_LAYER_NAMES: &[&str] = &["VK_LAYER_KHRONOS_validation"];
 const VALIDATION_EXTENSION_NAMES: &[&str] = &["VK_EXT_debug_utils"];
 
-/// Creates the main debug messenger the debugging instance to go along with it
+/// Creates the main debug messenger the debugging instance to go along with it.
 #[cfg(debug_assertions)]
 pub(crate) fn get_debug_messenger(
     vulkan_entry: &Entry,
@@ -102,9 +102,9 @@ pub(crate) fn get_setup_extension_names(
     Ok(extension_names)
 }
 
-/// Sets up the debug messenger extension
+/// Sets up the debug messenger extension.
 pub(crate) fn get_debug_messenger_info() -> vk::DebugUtilsMessengerCreateInfoEXT<'static> {
-    // We want warnings and errors but not verbose diagnostic messages
+    // We want warnings and errors but not verbose diagnostic messages.
     let severity_flags = vk::DebugUtilsMessageSeverityFlagsEXT::WARNING
         .bitor(vk::DebugUtilsMessageSeverityFlagsEXT::ERROR);
 
@@ -219,10 +219,10 @@ pub(crate) mod tests {
         assert_ne!(get_setup_extension_names(& glfw_instance).unwrap().len(), 0);
     }
 
-    /// A Mutex used for ensuring tests that use the rendering libraries do not run in parallel
+    /// A Mutex used for ensuring tests that use the rendering libraries do not run in parallel.
     static TEST_MUTEX: Mutex<()> = Mutex::new(());
 
-    /// Returns a vulkan entry and a GLFW entry for running tests
+    /// Returns a vulkan entry and a GLFW entry for running tests.
     pub(crate) fn get_entries() -> (MutexGuard<'static, ()>, Entry, Glfw) {
         let guard = get_test_mutex_guard();
         let entry = Entry::linked();
@@ -230,9 +230,9 @@ pub(crate) mod tests {
         (guard, entry, glfw)
     }
 
-    /// Returns the unwrapped TEST_MUTEX
-    /// A Poisoned Mutex will just be reset to attempt running the tests anyway
-    /// Worst case the tests fail anyway, and we know the state in the mutex is fine as it is just ()
+    /// Returns the unwrapped TEST_MUTEX.
+    /// A Poisoned Mutex will just be reset to attempt running the tests anyway.
+    /// Worst case the tests fail anyway, and we know the state in the mutex is fine.
     fn get_test_mutex_guard() -> MutexGuard<'static, ()>{
         match TEST_MUTEX.lock() {
             Ok(m) => m,
@@ -244,18 +244,18 @@ pub(crate) mod tests {
 
     }
 
-    /// Returns a vulkan instance for running tests
+    /// Returns a vulkan instance for running tests.
     pub(crate) fn get_vulkan_instance(vulkan_entry: &Entry, glfw_instance: &Glfw) -> Instance {
         crate::renderer::Renderer::create_vulkan_instance("test", vulkan_entry, glfw_instance)
             .unwrap()
     }
     
-    /// Returns a window for running tests
+    /// Returns a window for running tests.
     pub(crate) fn get_window(glfw_instance: &mut Glfw) -> glfw::PWindow {
         crate::renderer::window_handler::create_window("test", glfw_instance).unwrap()
     }
     
-    /// Returns a window surface for running tests
+    /// Returns a window surface for running tests.
     pub(crate) fn get_window_surface(
         vulkan_instance: &mut Instance,
         window: &glfw::PWindow
@@ -263,7 +263,7 @@ pub(crate) mod tests {
         crate::renderer::window_handler::create_window_surface(vulkan_instance, window).unwrap()
     }
 
-    /// Gets a surface instance for running tests
+    /// Gets a surface instance for running tests.
     pub(crate) fn get_surface_instance(
         vulkan_entry: & Entry,
         vulkan_instance: & Instance
@@ -271,7 +271,7 @@ pub(crate) mod tests {
         khr::surface::Instance::new(vulkan_entry, vulkan_instance)
     }
 
-    /// Used by the tests in this module to validate that we are correctly testing the layers
+    /// Used by the tests in this module to validate that we are correctly testing the layers.
     fn test_layer_support(layers_string: &Vec<String>) -> bool {
         let (_guard, vulkan_entry, _) = get_entries();
         match validate_setup_layers_exist(&layers_string, &vulkan_entry) {

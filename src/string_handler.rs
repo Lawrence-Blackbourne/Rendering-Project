@@ -1,7 +1,7 @@
 use std::ffi::{self, c_char, CString, CStr};
 use crate::renderer::RendererError;
 
-/// Converts most types to a CString
+/// Converts most types to a CString.
 pub fn convert_to_cstring<T: Into<Vec<u8>>>(str: T) -> Result<CString, RendererError> {
     match CString::new(str) {
         Ok(e) => Ok(e),
@@ -9,18 +9,18 @@ pub fn convert_to_cstring<T: Into<Vec<u8>>>(str: T) -> Result<CString, RendererE
     }
 }
 
-/// Converts a String to a CString as String does not fit in the bound given above
+/// Converts a String to a CString as String does not fit in the bound given above.
 pub fn string_to_cstring(str: &String) -> Result<CString, RendererError> {
     convert_to_cstring(str.as_str())
 }
 
-/// Converts a character array to a CStr
-/// The array must have a valid nul terminator at the end
+/// Converts a character array to a CStr.
+/// The array must have a valid nul terminator at the end.
 pub unsafe fn char_array_to_cstr(array: &[c_char]) -> &CStr {
     unsafe {CStr::from_ptr(array.as_ptr())}
 }
 
-/// Converts an entire vector of CStrings into a vector of character pointers
+/// Converts an entire vector of CStrings into a vector of character pointers.
 pub fn string_vector_to_char_vector(array: &[String]) -> Result<CharVector, RendererError> {
     let mut chars = Vec::new();
     let mut storage = Vec::new();
@@ -35,7 +35,7 @@ pub fn string_vector_to_char_vector(array: &[String]) -> Result<CharVector, Rend
     })
 }
 
-/// Stores the CStrings with the character pointers to keep things safe
+/// Stores the CStrings with the character pointers to keep things safe.
 pub(crate) struct CharVector {
     pub chars: Vec<*const c_char>,
     _storage: Vec<CString>,

@@ -77,7 +77,7 @@ fn is_physical_device_suitable(
     Ok(true)
 }
 
-/// Finds the index for all the queue families we need
+/// Finds the index for all the queue families we need.
 pub(super) fn get_queue_family_indices(
     vulkan_instance: &Instance,
     surface_instance: &khr::surface::Instance,
@@ -93,7 +93,7 @@ pub(super) fn get_queue_family_indices(
         queue_families
     };
 
-    // If updating this to have more queue families, make sure to assign them below
+    // If updating this to have more queue families, make sure to assign them below.
     let mut found_queue_families = QueueFamilyIndices {
         queue_family_indices: [None, None],
     };
@@ -103,7 +103,7 @@ pub(super) fn get_queue_family_indices(
             return Err(RendererError::TooManyQueuesAvailableToHandleError)
         }
 
-        // Checks if the current queue is suitable for the graphics family
+        // Checks if the current queue is suitable for the graphics family.
         if found_queue_families.queue_family_indices[QueueFamilyIndices::GRAPHICS_QUEUE] == None &&
             queue.queue_family_properties.queue_flags.contains(vk::QueueFlags::GRAPHICS) {
             found_queue_families.queue_family_indices[QueueFamilyIndices::GRAPHICS_QUEUE] =
@@ -125,7 +125,7 @@ pub(super) fn get_queue_family_indices(
     Ok(found_queue_families)
 }
 
-/// A function to check that the physical device selected supports the required device extensions
+/// A function to check that the physical device selected supports the required device extensions.
 fn check_device_extension_support(vulkan_instance: &Instance, device: vk::PhysicalDevice)
     -> Result<bool, RendererError> {
     let available_extensions = unsafe {
@@ -149,8 +149,8 @@ fn check_device_extension_support(vulkan_instance: &Instance, device: vk::Physic
     Ok(true)
 }
 
-/// A function to rank the physical devices available
-/// Right now it just gives all dedicated GPUs a score of 1 and other GPUs a score of 0;
+/// A function to rank the physical devices available.
+/// Right now it just gives all dedicated GPUs a score of 1 and other GPUs a score of 0.
 /// TODO figure out a way to allow the user to select what physical device to use
 fn rank_device(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> i32 {
     let device_properties = unsafe { vulkan_instance.get_physical_device_properties(device) };
@@ -187,7 +187,7 @@ fn get_device_display_info(
 }
 
 /// This function checks that the physical device and surface can handle an adequate swapchain.
-/// Must have verified that the required extensions are supported before running
+/// Must have verified that the required extensions are supported before running.
 fn check_device_display_capabilities(
     surface_instance: &khr::surface::Instance,
     device: vk::PhysicalDevice,
@@ -204,7 +204,7 @@ mod tests {
     use super::*;
     use crate::renderer::debugger::tests;
 
-    // This test will also fail on any device that is not suitable for the program to be run on
+    // This test will also fail on any device that is not suitable for the program to be run on.
     #[test]
     fn can_get_physical_device() {
         let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();

@@ -2,7 +2,7 @@ use ash::vk;
 use super::device_handler::info_handler;
 use crate::renderer::RendererError;
 
-/// Stores the settings needed to create the swapchain
+/// Stores the settings needed to create the swapchain.
 struct SwapchainSettings {
     format: vk::SurfaceFormatKHR, // The data format of the images
     mode: vk::PresentModeKHR, // The presentation mode of the images
@@ -10,7 +10,7 @@ struct SwapchainSettings {
     image_count: u8, // The number of frames in the swapchain
 }
 
-/// Takes in the capabilities of the device and then chooses the setting for the swapchain
+/// Takes in the capabilities of the device and then chooses the setting for the swapchain.
 fn get_swapchain_settings(
     info: info_handler::InternalDisplayInfo,
     desired_image_count: u8,

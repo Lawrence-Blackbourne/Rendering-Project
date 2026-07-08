@@ -33,7 +33,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    /// Creates a new Renderer instance to use to render images
+    /// Creates a new Renderer instance to use to render images.
     pub fn new(
         name: &str,
         settings: info_handler::LogicalDeviceSettings,
@@ -48,18 +48,17 @@ impl Renderer {
         let mut vulkan_instance
             = Self::create_vulkan_instance(name, &vulkan_entry, &glfw_instance)?;
 
-        // This provides the permanent debug info
+        // This provides the permanent debug info.
         #[cfg(debug_assertions)]
         let (debug_instance, debug_messenger) =
             debugger::get_debug_messenger(&vulkan_entry, &vulkan_instance)?;
 
-        // This creates the window to render to
+        // This creates the window to render to.
         let window = window_handler::create_window(name, &mut glfw_instance)?;
         let surface = window_handler::create_window_surface(&mut vulkan_instance, &window)?;
         let surface_instance = khr::surface::Instance::new(&vulkan_entry, &vulkan_instance);
 
-        // This gets the Vulkan device to use
-        // The device is
+        // This gets the Vulkan device to use.
         let (device, queues) = device_handler::get_device(
             &vulkan_instance,
             &surface_instance,
@@ -94,7 +93,7 @@ impl Renderer {
         }
     }
 
-    /// Creates the Vulkan Instance
+    /// Creates the Vulkan Instance.
     fn create_vulkan_instance(
         app_name: &str,
         vulkan_entry: &Entry,
@@ -155,7 +154,7 @@ pub struct Size {
 }
 
 impl From<vk::Extent2D> for Size {
-    fn from(value: vk::Extent2D) -> Size {
+    fn from(value: vk::Extent2D) -> Self {
         Size {
             x: value.width,
             y: value.height,
@@ -171,6 +170,7 @@ pub enum RendererStatus {
 }
 
 #[derive(Debug, Eq, PartialEq)]
+#[non_exhaustive]
 pub enum RendererError {
     StringContainingNullCharError(NulError),
     CStringDidNotContainTerminatingNullButeError,

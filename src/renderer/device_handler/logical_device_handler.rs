@@ -45,7 +45,7 @@ fn get_queue_create_infos(
     let mut queues = vec![];
 
     // If we want to add any flags to a queue, we need to replace vk::GetDeviceQueue with
-    // vk::GetDeviceQueue2
+    // vk::GetDeviceQueue2.
     let mut created_queue_family_indices = Vec::new();
     for index in queue_indices.queue_family_indices {
         let queue_flags = vk::DeviceQueueCreateFlags::empty();
@@ -53,7 +53,7 @@ fn get_queue_create_infos(
             Some(index) => index,
             None => return Err(RendererError::LogicError(String::from("get_queue_create_info")))
         };
-        // Queue families should only be set up once
+        // Queue families should only be set up once.
         if created_queue_family_indices.contains(&index) {
             continue;
         }

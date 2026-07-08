@@ -10,10 +10,8 @@ use crate::renderer::{RendererError, Size};
 const DEVICE_EXTENSION_NAMES: [&CStr; 1] = [khr::swapchain::NAME];
 const NUM_QUEUE_FAMILIES: usize = 2;
 
-/// Gives the caller the
-
-/// Creates a virtual device with the given settings
-/// Also creates the appropriate queues
+/// Creates a virtual device with the given settings.
+/// Also creates the appropriate queues.
 pub(crate) fn get_device(
     vulkan_instance: &Instance,
     surface_instance: &khr::surface::Instance,
@@ -38,8 +36,8 @@ pub(crate) fn get_device(
     Ok((logical_device, queues))
 }
 
-/// Stores the indexes of the queue families used
-/// If updating, remember to update get_queue_create_infos in logical_device_handler
+/// Stores the indexes of the queue families used.
+/// If updating, remember to update get_queue_create_infos in logical_device_handler.
 #[derive(Debug)]
 struct QueueFamilyIndices {
     //This stores all the queue families
@@ -60,7 +58,7 @@ mod tests {
     use super::*;
     //TODO tests including checking queue_family_indices is set up correctly with good constants
 
-    /// Gets a physical device for running tests
+    /// Gets a physical device for running tests.
     pub(super) fn get_physical_device(
         vulkan_instance: &Instance,
         surface_instance: &khr::surface::Instance,
@@ -70,7 +68,7 @@ mod tests {
             .unwrap()
     }
 
-    /// Gets a logical device for running tests
+    /// Gets a logical device for running tests.
     pub(super) fn get_logical_device(
         vulkan_instance: &Instance,
         physical_device: vk::PhysicalDevice,
