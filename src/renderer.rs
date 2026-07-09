@@ -155,7 +155,7 @@ pub struct Size {
 
 impl From<vk::Extent2D> for Size {
     fn from(value: vk::Extent2D) -> Self {
-        Size {
+        Self {
             x: value.width,
             y: value.height,
         }

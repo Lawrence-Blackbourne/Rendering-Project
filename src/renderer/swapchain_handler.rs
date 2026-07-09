@@ -12,7 +12,8 @@ struct SwapchainSettings {
 
 /// Takes in the capabilities of the device and then chooses the setting for the swapchain.
 fn get_swapchain_settings(
-    info: info_handler::InternalDisplayInfo,
+    //TODO look at changing this to using DisplayInfo not VulkanDisplayInfo
+    info: info_handler::VulkanDisplayInfo,
     desired_image_count: u8,
 ) -> Result<SwapchainSettings, RendererError> {
 

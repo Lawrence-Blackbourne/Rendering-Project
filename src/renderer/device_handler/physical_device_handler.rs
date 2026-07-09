@@ -165,7 +165,7 @@ fn get_device_display_info(
     surface_instance: &khr::surface::Instance,
     device: vk::PhysicalDevice,
     surface: vk::SurfaceKHR)
-    -> Result<info_handler::InternalDisplayInfo, RendererError> {
+    -> Result<info_handler::VulkanDisplayInfo, RendererError> {
 
     let surface_capabilities = unsafe{
         surface_instance.get_physical_device_surface_capabilities(device, surface)
@@ -179,7 +179,7 @@ fn get_device_display_info(
         surface_instance.get_physical_device_surface_present_modes(device, surface)
     }?;
 
-    Ok(info_handler::InternalDisplayInfo{
+    Ok(info_handler::VulkanDisplayInfo{
         capabilities: surface_capabilities,
         formats: surface_formats,
         presentation_modes: surface_presentation_modes,
