@@ -1,7 +1,7 @@
 mod physical_device_handler;
 mod logical_device_handler;
 mod queue_handler;
-pub(crate) mod info_handler;
+pub mod device_info_handler;
 
 use ash::{vk, khr, Device, Instance};
 use std::ffi::CStr;
@@ -16,7 +16,7 @@ pub(crate) fn get_device(
     vulkan_instance: &Instance,
     surface_instance: &khr::surface::Instance,
     surface: vk::SurfaceKHR,
-    logical_device_settings: info_handler::LogicalDeviceSettings,
+    logical_device_settings: device_info_handler::LogicalDeviceSettings,
 ) -> Result<(Device, Vec<vk::Queue>), RendererError> {
     let physical_device = logical_device_settings.physical_device.device;
     let logical_device = logical_device_handler::get_logical_device(

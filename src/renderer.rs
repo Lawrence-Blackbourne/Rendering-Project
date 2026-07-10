@@ -11,7 +11,8 @@ use std::ffi::{NulError};
 
 use crate::string_handler::{convert_to_cstring,
                             string_vector_to_char_vector};
-use device_handler::info_handler;
+
+pub use device_handler::device_info_handler;
 
 pub struct Renderer {
     _vulkan_entry: Entry,
@@ -36,7 +37,7 @@ impl Renderer {
     /// Creates a new Renderer instance to use to render images.
     pub fn new(
         name: &str,
-        settings: info_handler::LogicalDeviceSettings,
+        settings: device_info_handler::LogicalDeviceSettings,
     ) -> Result<Renderer, RendererError> {
         // These are used to call functions on.
         let vulkan_entry = Entry::linked();
@@ -148,6 +149,7 @@ impl Drop for Renderer {
     }
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Size {
     pub x: u32,
     pub y: u32,

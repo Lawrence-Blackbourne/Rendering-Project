@@ -3,12 +3,14 @@ use crate::renderer::Size;
 
 /// A struct holding a potential physical device in a way that is easily usable.
 #[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PhysicalDevice {
     pub display_info: DisplayInfo,
     pub(crate) device: vk::PhysicalDevice,
 }
 
 /// This stores the details about what surface information is supported.
+#[derive(Clone, Debug)]
 pub(crate) struct VulkanDisplayInfo {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
@@ -16,20 +18,41 @@ pub(crate) struct VulkanDisplayInfo {
 }
 
 /// A struct storing the info about what settings we want for our logical device.
+#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogicalDeviceSettings {
-    pub physical_device: PhysicalDevice,
-    pub num_swap_frames: u8,
+    pub(crate) physical_device: PhysicalDevice,
+    pub(crate) num_swap_frames: u8,
+}
+
+impl LogicalDeviceSettings {
+    pub fn get_physical_device(&self) -> &PhysicalDevice {
+        &self.physical_device
+    }
+
+    pub fn with_physical_device(mut self, device: PhysicalDevice) -> Self {
+        self.physical_device = device;
+        self
+    }
+
+    pub fn get_num_swap_frames(&self) -> u8 {
+        self.num_swap_frames
+    }
+
+    pub fn with_num_swap_frames(mut self, num_swap_frames: u8) -> Self {
+        self.num_swap_frames = num_swap_frames;
+        self
+    }
 }
 
 /// The info to be given to an external caller so they can choose a setup they want.
-#[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DisplayInfo {
     pub capabilities: Capabilities,
-    //TODO pub formats: Vec<Format>,
+    //TODO pub available_formats: Vec<ImageFormat>,
     //TODO pub presentation_modes: Vec<PresentationMode>
 }
 
-/// Allows us to transform our InternalDisplayInfo into a format that can be used for.
 impl From<VulkanDisplayInfo> for DisplayInfo {
     fn from(value: VulkanDisplayInfo) -> Self {
         Self {
@@ -40,16 +63,20 @@ impl From<VulkanDisplayInfo> for DisplayInfo {
 
 /// What capabilities a physical device has.
 #[non_exhaustive]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Capabilities {
     pub min_swapchain_image_count: u32,
     pub max_swapchain_image_count: u32,
-    pub current_image_size: Size,
+
+    /// A None for current_image_size is a special value meaning that the size of the image depends
+    /// on the size of the provided swapchain.
+    pub current_image_size: Option<Size>,
     pub min_swapchain_size: Size,
     pub max_swapchain_size: Size,
     pub max_number_of_image_layers: u32,
     pub supported_image_transformations: ImageTransformations,
     pub current_image_transformations: ImageTransformations,
-    pub supported_alpha_composting_modes: AlphaCompositingModes,
+    pub supported_alpha_compositing_modes: AlphaCompositingModes,
     pub supported_image_usages: ImageUsages,
     pub supported_vulkan_image_usages: VulkanImageUsages,
 }
@@ -59,13 +86,16 @@ impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
         Self {
             min_swapchain_image_count: value.min_image_count,
             max_swapchain_image_count: value.max_image_count,
-            current_image_size: value.current_extent.into(),
+            current_image_size: match value.current_extent {
+                vk::Extent2D{ width: 0xFFFFFFFF, height: 0xFFFFFFFF } => None,
+                value => Some(value.into())
+            },
             min_swapchain_size: value.min_image_extent.into(),
             max_swapchain_size: value.max_image_extent.into(),
             max_number_of_image_layers: value.max_image_array_layers,
             supported_image_transformations: value.supported_transforms.into(),
             current_image_transformations: value.current_transform.into(),
-            supported_alpha_composting_modes: value.supported_composite_alpha.into(),
+            supported_alpha_compositing_modes: value.supported_composite_alpha.into(),
             supported_image_usages: value.supported_usage_flags.into(),
             supported_vulkan_image_usages: value.supported_usage_flags.into(),
         }
@@ -73,22 +103,23 @@ impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
 }
 
 /// Stores transformations of the image.
-/// Mirror is horizontal.
-/// Rotate is clockwise.
-/// Mirror is always done before rotate.
+/// Mirroring is horizontal.
+/// Rotation is clockwise.
+/// Mirroring is always done before rotation.
 /// Inherit means the transformation is not specified, and is determined by platform specific
 /// considerations and mechanisms.
 #[non_exhaustive]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ImageTransformations {
-    identity: bool,
-    rotate_90_degrees: bool,
-    rotate_180_degrees: bool,
-    rotate_270_degrees: bool,
-    mirror: bool,
-    mirror_and_rotate_90_degrees: bool,
-    mirror_and_rotate_180_degrees: bool,
-    mirror_and_rotate_270_degrees: bool,
-    inherit: bool,
+    pub identity: bool,
+    pub rotate_90_degrees: bool,
+    pub rotate_180_degrees: bool,
+    pub rotate_270_degrees: bool,
+    pub mirror: bool,
+    pub mirror_and_rotate_90_degrees: bool,
+    pub mirror_and_rotate_180_degrees: bool,
+    pub mirror_and_rotate_270_degrees: bool,
+    pub inherit: bool,
 }
 
 impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
@@ -119,17 +150,18 @@ impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
 /// In Pre Multiplied the non-alpha components are expected to already be multiplied by the
 /// alpha component.
 /// In Post Multiplied the non-alpha components are not expected to already be multiplied by the
-/// alpha component, and the compositer will multiply the non-alpha components by the alpha
+/// alpha component, and the compositor will multiply the non-alpha components by the alpha
 /// component.
 /// In Inherit, the way that the alpha component is used is platform-specific.
 /// If the image does not have an alpha component, these settings will not do anything (except
-/// potentially inherit depending on the system and things out of the code's control).
+/// potentially inherit depending on the specific system).
 #[non_exhaustive]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct AlphaCompositingModes {
-    opaque: bool,
-    pre_multiplied: bool,
-    post_multiplied: bool,
-    inherit: bool,
+    pub opaque: bool,
+    pub pre_multiplied: bool,
+    pub post_multiplied: bool,
+    pub inherit: bool,
 }
 
 impl From<vk::CompositeAlphaFlagsKHR> for AlphaCompositingModes {
@@ -143,12 +175,14 @@ impl From<vk::CompositeAlphaFlagsKHR> for AlphaCompositingModes {
     }
 }
 
+/// Specifies how an image is used.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ImageUsages {
 
 }
 
 impl From<vk::ImageUsageFlags> for ImageUsages {
-    fn from(value: vk::ImageUsageFlags) -> Self {
+    fn from(_value: vk::ImageUsageFlags) -> Self {
         ImageUsages {
 
         }
@@ -158,59 +192,60 @@ impl From<vk::ImageUsageFlags> for ImageUsages {
 /// Specifies how an image is used.
 // TODO phase out in favor of ImageUsages.
 #[non_exhaustive]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct VulkanImageUsages {
     /// Can be used as a source of transfer operations.
-    transfer_source: bool,
+    pub transfer_source: bool,
 
     /// Can be used as a destination for transfer operations.
-    transfer_destination: bool,
+    pub transfer_destination: bool,
 
     /// Can be sampled from by shaders, and create an image view which can be used for a sampler.
-    sampled: bool,
+    pub sampled: bool,
 
     /// Can create an image view which can be used for image storage.
-    storage: bool,
+    pub storage: bool,
 
     /// Can create an image view which can be used in a framebuffer.
-    colour_attachment: bool,
+    pub colour_attachment: bool,
 
     /// Can create an image view which can be used as a depth/stencil or depth/stencil resolve
     /// attachment in a framebuffer.
-    depth_stencil_attachment: bool,
+    pub depth_stencil_attachment: bool,
 
     /// Can create an image view which can be used as a descriptor set, can be read from a
     /// shader as an input attachment, and can be used as an input attachment to a framebuffer.
-    input_attachment: bool,
+    pub input_attachment: bool,
 
     /// Can be used as a decode output picture in a video decode operation.
-    video_decode_destination: bool,
+    pub video_decode_destination: bool,
 
     /// Can be used as an output reconstructed picture or an input reference picture in a video
     /// decode operation.
-    video_decode_decoded_picture_buffer: bool,
+    pub video_decode_decoded_picture_buffer: bool,
 
-    /// Can be used as an encode input picture in a video decode operation.
-    video_encode_source: bool,
+    /// Can be used as an encode input picture in a video encode operation.
+    pub video_encode_source: bool,
 
     /// Can be used as an output reconstructed picture or an input reference picture in a video
     /// encode operation.
-    video_encode_decoded_picture_buffer: bool,
+    pub video_encode_decoded_picture_buffer: bool,
 
     /// Can create an image view which can be used as a fragment shading rate attachment.
-    shading_rate_image: bool,
+    pub shading_rate_image: bool,
 
     /// Can create an image view which can be used as a fragment density map image.
-    fragment_density_map: bool,
+    pub fragment_density_map: bool,
 
     /// Can create an image view which can be used as a fragment shading rate attachment, or as a
     /// shading rate image.
-    fragment_shading_rate_attachment: bool,
+    pub fragment_shading_rate_attachment: bool,
 
     /// Can be used with host copy commands and host layout transitions.
-    host_transfer: bool,
+    pub host_transfer: bool,
 }
 
-impl From <vk::ImageUsageFlags> for VulkanImageUsages {
+impl From<vk::ImageUsageFlags> for VulkanImageUsages {
     fn from(value: vk::ImageUsageFlags) -> Self {
         Self {
             transfer_source: value.contains(vk::ImageUsageFlags::TRANSFER_SRC),
@@ -224,7 +259,7 @@ impl From <vk::ImageUsageFlags> for VulkanImageUsages {
             video_decode_decoded_picture_buffer: value.contains(
                 vk::ImageUsageFlags::VIDEO_DECODE_DPB_KHR
             ),
-            video_encode_source: value.contains(vk::ImageUsageFlags::VIDEO_DECODE_SRC_KHR),
+            video_encode_source: value.contains(vk::ImageUsageFlags::VIDEO_ENCODE_SRC_KHR),
             video_encode_decoded_picture_buffer: value.contains(
                 vk::ImageUsageFlags::VIDEO_ENCODE_DPB_KHR
             ),

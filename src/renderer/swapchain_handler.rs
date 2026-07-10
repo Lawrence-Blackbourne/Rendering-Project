@@ -1,5 +1,5 @@
 use ash::vk;
-use super::device_handler::info_handler;
+use super::device_handler::device_info_handler;
 use crate::renderer::RendererError;
 
 /// Stores the settings needed to create the swapchain.
@@ -13,7 +13,7 @@ struct SwapchainSettings {
 /// Takes in the capabilities of the device and then chooses the setting for the swapchain.
 fn get_swapchain_settings(
     //TODO look at changing this to using DisplayInfo not VulkanDisplayInfo
-    info: info_handler::VulkanDisplayInfo,
+    info: device_info_handler::VulkanDisplayInfo,
     desired_image_count: u8,
 ) -> Result<SwapchainSettings, RendererError> {
 
