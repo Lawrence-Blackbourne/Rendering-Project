@@ -1,11 +1,11 @@
-mod physical_device_handler;
-mod logical_device_handler;
-mod queue_handler;
 pub mod device_info_handler;
+mod logical_device_handler;
+mod physical_device_handler;
+mod queue_handler;
 
-use ash::{vk, khr, Device, Instance};
+use crate::renderer::RendererError;
+use ash::{Device, Instance, khr, vk};
 use std::ffi::CStr;
-use crate::renderer::{RendererError};
 
 const DEVICE_EXTENSION_NAMES: [&CStr; 1] = [khr::swapchain::NAME];
 const NUM_QUEUE_FAMILIES: usize = 2;
@@ -79,7 +79,8 @@ mod tests {
             vulkan_instance,
             physical_device,
             surface_instance,
-            surface)
-            .unwrap()
+            surface,
+        )
+        .unwrap()
     }
 }

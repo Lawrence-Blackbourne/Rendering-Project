@@ -2,14 +2,13 @@
 //! receives into useful information for the library user.
 //! The module also contains structs helpful for setting up the device.
 
-use ash::vk;
 use crate::renderer::Size;
+use ash::vk;
 
 /// A struct holding a potential physical device in a way that is easily usable.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PhysicalDevice {
-
     /// The information about what this device can be used for
     pub device_info: DeviceInfo,
     pub(crate) device: vk::PhysicalDevice,
@@ -37,13 +36,12 @@ pub(crate) struct VulkanDisplayInfo {
 pub struct LogicalDeviceSettings {
     pub(crate) physical_device: PhysicalDevice,
     format: vk::SurfaceFormatKHR, // The data format of the images
-    mode: vk::PresentModeKHR, // The presentation mode of the images
-    size: vk::Extent2D, // Stores the size of the swapchain images
+    mode: vk::PresentModeKHR,     // The presentation mode of the images
+    size: vk::Extent2D,           // Stores the size of the swapchain images
     pub(crate) num_swap_frames: u8,
 }
 
 impl LogicalDeviceSettings {
-
     /// Returns the physical device that is currently stored within the settings.
     pub fn get_physical_device(&self) -> &PhysicalDevice {
         &self.physical_device
@@ -70,7 +68,6 @@ impl LogicalDeviceSettings {
 /// The info to be given to an external caller so they can choose a setup they want.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct DeviceInfo {
-
     /// The capabilities of the device.
     pub capabilities: Capabilities,
     //TODO pub available_formats: Vec<Format>,
@@ -89,7 +86,6 @@ impl From<VulkanDisplayInfo> for DeviceInfo {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Capabilities {
-
     /// The minimum number of images that can be in the swapchain.
     pub min_swapchain_image_count: u32,
 
@@ -129,8 +125,11 @@ impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
             min_swapchain_image_count: value.min_image_count,
             max_swapchain_image_count: value.max_image_count,
             current_image_size: match value.current_extent {
-                vk::Extent2D{ width: 0xFFFFFFFF, height: 0xFFFFFFFF } => None,
-                value => Some(value.into())
+                vk::Extent2D {
+                    width: 0xFFFFFFFF,
+                    height: 0xFFFFFFFF,
+                } => None,
+                value => Some(value.into()),
             },
             min_swapchain_size: value.min_image_extent.into(),
             max_swapchain_size: value.max_image_extent.into(),
@@ -147,7 +146,6 @@ impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ImageTransformations {
-
     /// This transformation does nothing to the image.
     pub identity: bool,
 
@@ -185,16 +183,13 @@ impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
             rotate_180_degrees: value.contains(vk::SurfaceTransformFlagsKHR::ROTATE_180),
             rotate_270_degrees: value.contains(vk::SurfaceTransformFlagsKHR::ROTATE_270),
             mirror: value.contains(vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR),
-            mirror_and_rotate_90_degrees: value.contains(
-                vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90
-            ),
-            mirror_and_rotate_180_degrees: value.contains(
-                vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180
-            ),
-            mirror_and_rotate_270_degrees: value.contains(
-                vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270
-            ),
-            inherit: value.contains(vk::SurfaceTransformFlagsKHR::INHERIT)
+            mirror_and_rotate_90_degrees: value
+                .contains(vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90),
+            mirror_and_rotate_180_degrees: value
+                .contains(vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180),
+            mirror_and_rotate_270_degrees: value
+                .contains(vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270),
+            inherit: value.contains(vk::SurfaceTransformFlagsKHR::INHERIT),
         }
     }
 }
@@ -205,7 +200,6 @@ impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct AlphaCompositingModes {
-
     /// The alpha is ignored, and the image is treated as a constant alpha of 1.
     pub opaque: bool,
 
@@ -236,22 +230,17 @@ impl From<vk::CompositeAlphaFlagsKHR> for AlphaCompositingModes {
 /// Specifies how an image is used.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct ImageUsages {
-
-}
+pub struct ImageUsages {}
 
 impl From<vk::ImageUsageFlags> for ImageUsages {
     fn from(_value: vk::ImageUsageFlags) -> Self {
-        ImageUsages {
-
-        }
+        ImageUsages {}
     }
 }
 
 /// An image format and colour space pair.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Format {
-
     /// The format that the image will use.
     pub image_format: ImageFormat,
     //TODO pub colour_space: ColourSpace,
@@ -300,7 +289,6 @@ impl TryFrom<vk::Format> for ImageFormat {
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RegularImageFormat {
-
     /// The number of bits in the red channel.
     pub red_channel: u8,
 
@@ -341,6 +329,7 @@ pub struct RegularImageFormat {
 impl TryFrom<vk::Format> for RegularImageFormat {
     type Error = String;
 
+    //TODO: Replace this as it relies on an unstable feature
     fn try_from(value: vk::Format) -> Result<Self, Self::Error> {
         let str = format!("{value:?}");
         let mut chars = str.chars().peekable();
@@ -351,12 +340,11 @@ impl TryFrom<vk::Format> for RegularImageFormat {
         let mut a: u8 = 0;
         let mut d: u8 = 0;
 
-        let order_string = match Self::get_order_string(
-            &mut chars, &mut r, &mut g, &mut b, &mut a, &mut d
-        ) {
-            None => return Err(str),
-            Some(str) => str,
-        };
+        let order_string =
+            match Self::get_order_string(&mut chars, &mut r, &mut g, &mut b, &mut a, &mut d) {
+                None => return Err(str),
+                Some(str) => str,
+            };
         let order = match Self::get_order_from_str(&order_string) {
             Some(order) => order,
             None => return Err(str),
@@ -386,18 +374,18 @@ impl TryFrom<vk::Format> for RegularImageFormat {
                 "PACK8" => 8,
                 "PACK16" => 16,
                 "PACK32" => 32,
-                _ => return Err(str)
+                _ => return Err(str),
             };
             if r + g + b + a + d != pack_size {
-                return Err(str)
+                return Err(str);
             }
             if r % 8 != 0 || g % 8 != 0 || b % 8 != 0 || a % 8 != 0 || d % 8 != 0 {
-                return Err(str)
+                return Err(str);
             }
             true
         };
 
-        Ok(Self{
+        Ok(Self {
             red_channel: r,
             green_channel: g,
             blue_channel: b,
@@ -418,7 +406,7 @@ impl RegularImageFormat {
             Some(c) => match c.to_digit(10) {
                 None => return None,
                 Some(d) => d as u8,
-            }
+            },
         };
         loop {
             match chars.peek() {
@@ -426,7 +414,7 @@ impl RegularImageFormat {
                 Some(c) => match c.to_digit(10) {
                     None => return None,
                     Some(d) => current = current * 10 + d as u8,
-                }
+                },
             }
             chars.next();
         }
@@ -440,46 +428,57 @@ impl RegularImageFormat {
                     return false;
                 }
                 v
-            },
+            }
         };
         true
     }
 
     fn get_order_string(
         chars: &mut std::iter::Peekable<std::str::Chars>,
-        r: &mut u8, g: &mut u8, b: &mut u8, a: &mut u8, d: &mut u8,
+        r: &mut u8,
+        g: &mut u8,
+        b: &mut u8,
+        a: &mut u8,
+        d: &mut u8,
     ) -> Option<String> {
         let mut order_string = String::new();
         loop {
-            let next_char = match chars.next() {
-                None => return None,
-                Some(c) => c,
-            };
+            let next_char = chars.next()?;
             match next_char {
-                'R' => if Self::update_bit_count(r, chars) {
-                    order_string.push('R')
-                } else {
-                    return None;
+                'R' => {
+                    if Self::update_bit_count(r, chars) {
+                        order_string.push('R')
+                    } else {
+                        return None;
+                    }
                 }
-                'G' => if Self::update_bit_count(g, chars) {
-                    order_string.push('G')
-                } else {
-                    return None;
+                'G' => {
+                    if Self::update_bit_count(g, chars) {
+                        order_string.push('G')
+                    } else {
+                        return None;
+                    }
                 }
-                'B' => if Self::update_bit_count(b, chars) {
-                    order_string.push('B')
-                } else {
-                    return None;
+                'B' => {
+                    if Self::update_bit_count(b, chars) {
+                        order_string.push('B')
+                    } else {
+                        return None;
+                    }
                 }
-                'A' => if Self::update_bit_count(a, chars) {
-                    order_string.push('A')
-                } else {
-                    return None;
+                'A' => {
+                    if Self::update_bit_count(a, chars) {
+                        order_string.push('A')
+                    } else {
+                        return None;
+                    }
                 }
-                'D' => if Self::update_bit_count(d, chars) {
-                    order_string.push('D')
-                } else {
-                    return None;
+                'D' => {
+                    if Self::update_bit_count(d, chars) {
+                        order_string.push('D')
+                    } else {
+                        return None;
+                    }
                 }
                 '_' => break,
                 _ => return None,
@@ -566,7 +565,6 @@ pub enum RegularImageFormatOrder {
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegularImageFormatConversion {
-
     /// The data is given to the shaders as an integer directly.
     Int,
 

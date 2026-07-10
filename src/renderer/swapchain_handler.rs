@@ -1,6 +1,6 @@
-use ash::vk;
 use super::device_handler::device_info_handler;
 use crate::renderer::RendererError;
+use ash::vk;
 
 /// Takes in the capabilities of the device and then chooses the setting for the swapchain.
 fn get_swapchain_settings(
@@ -8,7 +8,6 @@ fn get_swapchain_settings(
     info: device_info_handler::VulkanDisplayInfo,
     _desired_image_count: u8,
 ) -> Result<device_info_handler::LogicalDeviceSettings, RendererError> {
-
     let mut _desired_format = None;
     const PREFERRED_FORMAT: vk::Format = vk::Format::R8G8B8A8_SRGB;
 
@@ -17,7 +16,7 @@ fn get_swapchain_settings(
             _desired_format = Some(format);
         }
     }
-    if _desired_format == None {
+    if _desired_format.is_none() {
         _desired_format = info.formats.first();
     }
 
@@ -29,8 +28,6 @@ fn get_swapchain_settings(
             _desired_present_mode = vk::PresentModeKHR::from_raw(mode.as_raw());
         }
     }
-
-    
 
     panic!();
 }

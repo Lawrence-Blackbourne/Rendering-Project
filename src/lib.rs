@@ -3,14 +3,14 @@ mod string_handler;
 
 pub fn get_renderer(
     _name: &str,
-    _num_frames: u8
+    _num_frames: u8,
 ) -> Result<renderer::Renderer, renderer::RendererError> {
     //TODO renderer::Renderer::new(name, num_frames)
     panic!();
 }
 
 #[cfg(test)]
-mod tests{
+mod tests {
     use super::*;
     use crate::renderer::debugger::tests;
 

@@ -1,5 +1,5 @@
-use std::ffi::{self, c_char, CString, CStr};
 use crate::renderer::RendererError;
+use std::ffi::{self, CStr, CString, c_char};
 
 /// Converts most types to a CString.
 pub fn convert_to_cstring<T: Into<Vec<u8>>>(str: T) -> Result<CString, RendererError> {
@@ -10,14 +10,14 @@ pub fn convert_to_cstring<T: Into<Vec<u8>>>(str: T) -> Result<CString, RendererE
 }
 
 /// Converts a String to a CString as String does not fit in the bound given above.
-pub fn string_to_cstring(str: &String) -> Result<CString, RendererError> {
-    convert_to_cstring(str.as_str())
+pub fn string_to_cstring(str: &str) -> Result<CString, RendererError> {
+    convert_to_cstring(str)
 }
 
 /// Converts a character array to a CStr.
 /// The array must have a valid nul terminator at the end.
 pub unsafe fn char_array_to_cstr(array: &[c_char]) -> &CStr {
-    unsafe {CStr::from_ptr(array.as_ptr())}
+    unsafe { CStr::from_ptr(array.as_ptr()) }
 }
 
 /// Converts an entire vector of CStrings into a vector of character pointers.
@@ -28,8 +28,8 @@ pub fn string_vector_to_char_vector(array: &[String]) -> Result<CharVector, Rend
         let current = string_to_cstring(str)?;
         chars.push(current.as_ptr());
         storage.push(current);
-    };
-    Ok(CharVector{
+    }
+    Ok(CharVector {
         chars,
         _storage: storage,
     })
@@ -64,8 +64,10 @@ mod tests {
 
     #[test]
     fn convert_valid_str_to_cstring() {
-        assert_eq!(convert_to_cstring("Hello World!").unwrap(),
-                   CString::new("Hello World!").unwrap());
+        assert_eq!(
+            convert_to_cstring("Hello World!").unwrap(),
+            CString::new("Hello World!").unwrap()
+        );
     }
 
     #[test]
@@ -75,13 +77,18 @@ mod tests {
 
     #[test]
     fn convert_empty_string_to_cstring() {
-        assert_eq!(string_to_cstring(&String::from("")).unwrap(), CString::new("").unwrap());
+        assert_eq!(
+            string_to_cstring(&String::from("")).unwrap(),
+            CString::new("").unwrap()
+        );
     }
 
     #[test]
     fn convert_valid_string_to_cstring() {
-        assert_eq!(string_to_cstring(&String::from("Hello World!")).unwrap(),
-                   CString::new("Hello World!").unwrap());
+        assert_eq!(
+            string_to_cstring(&String::from("Hello World!")).unwrap(),
+            CString::new("Hello World!").unwrap()
+        );
     }
 
     #[test]
@@ -93,8 +100,12 @@ mod tests {
     fn convert_empty_char_array_to_cstring() {
         let c_char_text = Vec::new();
         let c_char_array: [c_char; 0] = c_char_text.try_into().unwrap();
-        unsafe{ assert_eq!(char_array_to_cstr(&c_char_array),
-                           CString::new("").unwrap().as_c_str()); }
+        unsafe {
+            assert_eq!(
+                char_array_to_cstr(&c_char_array),
+                CString::new("").unwrap().as_c_str()
+            );
+        }
     }
 
     #[test]
@@ -106,7 +117,11 @@ mod tests {
         }
         let c_char_array: [c_char; 12] = c_char_text.try_into().unwrap();
 
-        unsafe { assert_eq!(char_array_to_cstr(&c_char_array),
-                            CString::new("Hello World!").unwrap().as_c_str()) }
+        unsafe {
+            assert_eq!(
+                char_array_to_cstr(&c_char_array),
+                CString::new("Hello World!").unwrap().as_c_str()
+            )
+        }
     }
 }
