@@ -2,8 +2,7 @@ use ash::{ext, vk, Entry, Instance};
 use glfw::Glfw;
 use std::{ffi::c_void,
           ops::BitOr,
-          ptr,
-          sync::{Mutex, MutexGuard}};
+          ptr};
 use crate::{renderer::RendererError,
             string_handler::convert_to_cstring};
 
@@ -152,6 +151,7 @@ unsafe extern "system" fn debug_messenger_callback_function(
 pub(crate) mod tests {
     use super::*;
     use ash::khr;
+    use std::sync::{Mutex, MutexGuard};
 
     #[test]
     fn can_get_debug_messenger() {
@@ -249,12 +249,12 @@ pub(crate) mod tests {
         crate::renderer::Renderer::create_vulkan_instance("test", vulkan_entry, glfw_instance)
             .unwrap()
     }
-    
+
     /// Returns a window for running tests.
     pub(crate) fn get_window(glfw_instance: &mut Glfw) -> glfw::PWindow {
         crate::renderer::window_handler::create_window("test", glfw_instance).unwrap()
     }
-    
+
     /// Returns a window surface for running tests.
     pub(crate) fn get_window_surface(
         vulkan_instance: &mut Instance,

@@ -5,7 +5,7 @@ pub mod device_info_handler;
 
 use ash::{vk, khr, Device, Instance};
 use std::ffi::CStr;
-use crate::renderer::{RendererError, Size};
+use crate::renderer::{RendererError};
 
 const DEVICE_EXTENSION_NAMES: [&CStr; 1] = [khr::swapchain::NAME];
 const NUM_QUEUE_FAMILIES: usize = 2;

@@ -1,3 +1,7 @@
+//! This module is used for translating information from the ash style information the library
+//! receives into useful information for the library user.
+//! The module also contains structs helpful for setting up the device.
+
 use ash::vk;
 use crate::renderer::Size;
 
@@ -5,7 +9,9 @@ use crate::renderer::Size;
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PhysicalDevice {
-    pub display_info: DisplayInfo,
+
+    /// The information about what this device can be used for
+    pub device_info: DeviceInfo,
     pub(crate) device: vk::PhysicalDevice,
 }
 
@@ -18,27 +24,43 @@ pub(crate) struct VulkanDisplayInfo {
 }
 
 /// A struct storing the info about what settings we want for our logical device.
+///
+/// # Examples
+/// ```
+/// # use rendering_project::renderer::device_info_handler::{DeviceInfo, LogicalDeviceSettings};
+/// let device_info: DeviceInfo = get_device_info();
+/// let settings: LogicalDeviceSettings = get_device_settings()
+///     .with_num_swap_frames(device_info.capabilities.min_swapchain_image_count);
+/// ```
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogicalDeviceSettings {
     pub(crate) physical_device: PhysicalDevice,
+    format: vk::SurfaceFormatKHR, // The data format of the images
+    mode: vk::PresentModeKHR, // The presentation mode of the images
+    size: vk::Extent2D, // Stores the size of the swapchain images
     pub(crate) num_swap_frames: u8,
 }
 
 impl LogicalDeviceSettings {
+
+    /// Returns the physical device that is currently stored within the settings.
     pub fn get_physical_device(&self) -> &PhysicalDevice {
         &self.physical_device
     }
 
+    /// Sets the physical device to be used.
     pub fn with_physical_device(mut self, device: PhysicalDevice) -> Self {
         self.physical_device = device;
         self
     }
 
+    /// Returns the number of swap frames that is currently stored within the settings.
     pub fn get_num_swap_frames(&self) -> u8 {
         self.num_swap_frames
     }
 
+    /// Sets the number of swap frames to be used.
     pub fn with_num_swap_frames(mut self, num_swap_frames: u8) -> Self {
         self.num_swap_frames = num_swap_frames;
         self
@@ -47,13 +69,16 @@ impl LogicalDeviceSettings {
 
 /// The info to be given to an external caller so they can choose a setup they want.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DisplayInfo {
+pub struct DeviceInfo {
+
+    /// The capabilities of the device.
     pub capabilities: Capabilities,
+
     //TODO pub available_formats: Vec<ImageFormat>,
     //TODO pub presentation_modes: Vec<PresentationMode>
 }
 
-impl From<VulkanDisplayInfo> for DisplayInfo {
+impl From<VulkanDisplayInfo> for DeviceInfo {
     fn from(value: VulkanDisplayInfo) -> Self {
         Self {
             capabilities: value.capabilities.into(),
@@ -65,20 +90,38 @@ impl From<VulkanDisplayInfo> for DisplayInfo {
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Capabilities {
+
+    /// The minimum number of images that can be in the swapchain.
     pub min_swapchain_image_count: u32,
+
+    /// The maximum number of images that can be in the swapchain.
     pub max_swapchain_image_count: u32,
 
+    /// The current size of the image size to be displayed in pixels.
     /// A None for current_image_size is a special value meaning that the size of the image depends
     /// on the size of the provided swapchain.
     pub current_image_size: Option<Size>,
+
+    /// The minimum size of the swapchain in pixels.
     pub min_swapchain_size: Size,
+
+    /// The maximum size of the swapchain in pixels.
     pub max_swapchain_size: Size,
+
+    /// The maximum number of layers to the image to be rendered to.
     pub max_number_of_image_layers: u32,
+
+    /// The possible transformations that can be applied to the image.
     pub supported_image_transformations: ImageTransformations,
+
+    /// The current transformations that are applied to the image.
     pub current_image_transformations: ImageTransformations,
+
+    /// The possible alpha compositing modes that can be applied to the rendering process.
     pub supported_alpha_compositing_modes: AlphaCompositingModes,
+
+    /// The possible usages of the image
     pub supported_image_usages: ImageUsages,
-    pub supported_vulkan_image_usages: VulkanImageUsages,
 }
 
 impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
@@ -97,28 +140,41 @@ impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
             current_image_transformations: value.current_transform.into(),
             supported_alpha_compositing_modes: value.supported_composite_alpha.into(),
             supported_image_usages: value.supported_usage_flags.into(),
-            supported_vulkan_image_usages: value.supported_usage_flags.into(),
         }
     }
 }
 
 /// Stores transformations of the image.
-/// Mirroring is horizontal.
-/// Rotation is clockwise.
-/// Mirroring is always done before rotation.
-/// Inherit means the transformation is not specified, and is determined by platform specific
-/// considerations and mechanisms.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ImageTransformations {
+
+    /// This transformation does nothing to the image.
     pub identity: bool,
+
+    /// The image is rotated 90 degrees clockwise.
     pub rotate_90_degrees: bool,
+
+    /// The image is rotated 180 degrees.
     pub rotate_180_degrees: bool,
+
+    /// The image is rotated 270 degrees clockwise.
     pub rotate_270_degrees: bool,
+
+    /// The image is mirrored horizontally.
     pub mirror: bool,
+
+    /// The image is mirrored horizontally and then rotated 90 degrees clockwise
     pub mirror_and_rotate_90_degrees: bool,
+
+    /// The image is mirrored horizontally and then rotated 180 degrees
     pub mirror_and_rotate_180_degrees: bool,
+
+    /// The image is mirrored horizontally and then rotated 270 degrees clockwise
     pub mirror_and_rotate_270_degrees: bool,
+
+    /// Inherit means the transformation is not specified, and is determined by platform specific
+    /// considerations and mechanisms.
     pub inherit: bool,
 }
 
@@ -145,22 +201,25 @@ impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
 }
 
 /// Stores how the alpha component of the image is determined.
-/// Opaque means that the alpha is ignored, and the image is treated as a constant alpha of 1.
-/// Pre Multiplied and Post Multiplied means that the alpha is respected.
-/// In Pre Multiplied the non-alpha components are expected to already be multiplied by the
-/// alpha component.
-/// In Post Multiplied the non-alpha components are not expected to already be multiplied by the
-/// alpha component, and the compositor will multiply the non-alpha components by the alpha
-/// component.
-/// In Inherit, the way that the alpha component is used is platform-specific.
 /// If the image does not have an alpha component, these settings will not do anything (except
 /// potentially inherit depending on the specific system).
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct AlphaCompositingModes {
+
+    /// The alpha is ignored, and the image is treated as a constant alpha of 1.
     pub opaque: bool,
+
+    /// The non-alpha components are expected to already be multiplied by the alpha component, and
+    /// the alpha is respected.
     pub pre_multiplied: bool,
+
+    /// The non-alpha components are not expected to already be multiplied by the alpha component,
+    /// and the compositor will multiply the non-alpha components by the alpha component, and the
+    /// alpha is respected.
     pub post_multiplied: bool,
+
+    /// The way that the alpha component is used is platform-specific.
     pub inherit: bool,
 }
 
@@ -185,90 +244,6 @@ impl From<vk::ImageUsageFlags> for ImageUsages {
     fn from(_value: vk::ImageUsageFlags) -> Self {
         ImageUsages {
 
-        }
-    }
-}
-
-/// Specifies how an image is used.
-// TODO phase out in favor of ImageUsages.
-#[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct VulkanImageUsages {
-    /// Can be used as a source of transfer operations.
-    pub transfer_source: bool,
-
-    /// Can be used as a destination for transfer operations.
-    pub transfer_destination: bool,
-
-    /// Can be sampled from by shaders, and create an image view which can be used for a sampler.
-    pub sampled: bool,
-
-    /// Can create an image view which can be used for image storage.
-    pub storage: bool,
-
-    /// Can create an image view which can be used in a framebuffer.
-    pub colour_attachment: bool,
-
-    /// Can create an image view which can be used as a depth/stencil or depth/stencil resolve
-    /// attachment in a framebuffer.
-    pub depth_stencil_attachment: bool,
-
-    /// Can create an image view which can be used as a descriptor set, can be read from a
-    /// shader as an input attachment, and can be used as an input attachment to a framebuffer.
-    pub input_attachment: bool,
-
-    /// Can be used as a decode output picture in a video decode operation.
-    pub video_decode_destination: bool,
-
-    /// Can be used as an output reconstructed picture or an input reference picture in a video
-    /// decode operation.
-    pub video_decode_decoded_picture_buffer: bool,
-
-    /// Can be used as an encode input picture in a video encode operation.
-    pub video_encode_source: bool,
-
-    /// Can be used as an output reconstructed picture or an input reference picture in a video
-    /// encode operation.
-    pub video_encode_decoded_picture_buffer: bool,
-
-    /// Can create an image view which can be used as a fragment shading rate attachment.
-    pub shading_rate_image: bool,
-
-    /// Can create an image view which can be used as a fragment density map image.
-    pub fragment_density_map: bool,
-
-    /// Can create an image view which can be used as a fragment shading rate attachment, or as a
-    /// shading rate image.
-    pub fragment_shading_rate_attachment: bool,
-
-    /// Can be used with host copy commands and host layout transitions.
-    pub host_transfer: bool,
-}
-
-impl From<vk::ImageUsageFlags> for VulkanImageUsages {
-    fn from(value: vk::ImageUsageFlags) -> Self {
-        Self {
-            transfer_source: value.contains(vk::ImageUsageFlags::TRANSFER_SRC),
-            transfer_destination: value.contains(vk::ImageUsageFlags::TRANSFER_DST),
-            sampled: value.contains(vk::ImageUsageFlags::SAMPLED),
-            storage: value.contains(vk::ImageUsageFlags::STORAGE),
-            colour_attachment: value.contains(vk::ImageUsageFlags::COLOR_ATTACHMENT),
-            depth_stencil_attachment: value.contains(vk::ImageUsageFlags::DEPTH_STENCIL_ATTACHMENT),
-            input_attachment: value.contains(vk::ImageUsageFlags::INPUT_ATTACHMENT),
-            video_decode_destination: value.contains(vk::ImageUsageFlags::VIDEO_DECODE_DST_KHR),
-            video_decode_decoded_picture_buffer: value.contains(
-                vk::ImageUsageFlags::VIDEO_DECODE_DPB_KHR
-            ),
-            video_encode_source: value.contains(vk::ImageUsageFlags::VIDEO_ENCODE_SRC_KHR),
-            video_encode_decoded_picture_buffer: value.contains(
-                vk::ImageUsageFlags::VIDEO_ENCODE_DPB_KHR
-            ),
-            shading_rate_image: value.contains(vk::ImageUsageFlags::SHADING_RATE_IMAGE_NV),
-            fragment_density_map: value.contains(vk::ImageUsageFlags::FRAGMENT_DENSITY_MAP_EXT),
-            fragment_shading_rate_attachment: value.contains(
-                vk::ImageUsageFlags::FRAGMENT_SHADING_RATE_ATTACHMENT_KHR
-            ),
-            host_transfer: value.contains(vk::ImageUsageFlags::HOST_TRANSFER_EXT),
         }
     }
 }
