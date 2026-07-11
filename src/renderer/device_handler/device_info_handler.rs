@@ -253,7 +253,7 @@ impl TryFrom<vk::SurfaceFormatKHR> for Format {
         Ok(Format {
             image_format: match value.format.try_into() {
                 Ok(fmt) => fmt,
-                Err(str) => return Err(FormatConversionError::ImageFormatError(str)),
+                Err(str) => return Err(FormatConversionError::ImageFormatError(value.format)),
             },
             //colour_space: value.into(),
         })
@@ -262,7 +262,7 @@ impl TryFrom<vk::SurfaceFormatKHR> for Format {
 
 /// An enum used in the conversion from vk::SurfaceFormatKHR to Format.
 pub enum FormatConversionError {
-    ImageFormatError(String),
+    ImageFormatError(vk::Format),
     ColourSpaceError,
 }
 
@@ -274,12 +274,12 @@ pub enum ImageFormat {
 }
 
 impl TryFrom<vk::Format> for ImageFormat {
-    type Error = String;
+    type Error = ();
 
     fn try_from(value: vk::Format) -> Result<Self, Self::Error> {
         match RegularImageFormat::try_from(value) {
             Ok(fmt) => Ok(ImageFormat::RegularFormat(fmt)),
-            Err(str) => Err(str),
+            Err(()) => Err(()),
         }
     }
 }
@@ -304,6 +304,9 @@ pub struct RegularImageFormat {
     /// The number of bits in the depth channel.
     pub depth_channel: u8,
 
+    /// The unused bits of the structure, which are optionally available for other uses
+    pub unused_bits: u8,
+
     /// Stores if the data channels are signed or not.
     pub signed: bool,
 
@@ -317,6 +320,10 @@ pub struct RegularImageFormat {
     /// bytes.
     /// The distinction between the two possibilities matters when reading the true values stored in
     /// RAM due to the endianness of systems.
+    /// Some formats have a number of bits not equal to a full number of bytes, and unused bits
+    /// after that to fill the gaps.
+    /// For these, if packed is true, then the group of bits with the unused ones at the end form an
+    /// unpacked word, and it is these words which are then packed
     pub packed: bool,
 
     /// Stores the order that the data is packed into the bitstring in.
@@ -327,220 +334,259 @@ pub struct RegularImageFormat {
 }
 
 impl TryFrom<vk::Format> for RegularImageFormat {
-    type Error = String;
+    type Error = ();
 
-    //TODO: Replace this as it relies on an unstable feature
     fn try_from(value: vk::Format) -> Result<Self, Self::Error> {
-        let str = format!("{value:?}");
-        let mut chars = str.chars().peekable();
-
-        let mut r: u8 = 0;
-        let mut g: u8 = 0;
-        let mut b: u8 = 0;
-        let mut a: u8 = 0;
-        let mut d: u8 = 0;
-
-        let order_string =
-            match Self::get_order_string(&mut chars, &mut r, &mut g, &mut b, &mut a, &mut d) {
-                None => return Err(str),
-                Some(str) => str,
-            };
-        let order = match Self::get_order_from_str(&order_string) {
-            Some(order) => order,
-            None => return Err(str),
+        use RegularImageFormatConversion::{Float, Int, Norm, SRGB, Scaled};
+        use RegularImageFormatOrder::{
+            ABGR, ARGB, BGR, BGRA, D, R, RG, RGB, RGBA, RX, RXGX, RXGXBXAX, XD,
         };
 
-        let signed = match chars.next() {
-            None => return Err(str),
-            Some('U') => false,
-            Some('S') => true,
-            Some(_) => return Err(str),
-        };
+        const DATA_SIZE: usize = 133;
 
-        let conversion_string = Self::get_conversion_string(&mut chars);
-        let conversion = match Self::get_conversion_from_str(&conversion_string) {
-            Some(conversion) => conversion,
-            None => return Err(str),
-        };
+        // rustfmt::skip is used here to avoid cargo fmt from splitting every element over many
+        // lines, causing this code block to become incredibly long.
+        #[rustfmt::skip]
+        const DATA: [(
+            vk::Format,
+            u8, u8, u8, u8, u8, u8,
+            bool, bool,
+            RegularImageFormatOrder,
+            RegularImageFormatConversion
+        ); DATA_SIZE] = [
+            // Vulkan Version 1.0.
+            (vk::Format::R4G4_UNORM_PACK8, 4, 4, 0, 0, 0, 0, false, true, RG, Norm),
 
-        let packed_string = match Self::get_packed_string(&mut chars) {
-            None => return Err(str),
-            Some(str) => str,
-        };
-        let packed = if packed_string.as_str() == "" {
-            false
-        } else {
-            let pack_size = match packed_string.as_str() {
-                "PACK8" => 8,
-                "PACK16" => 16,
-                "PACK32" => 32,
-                _ => return Err(str),
-            };
-            if r + g + b + a + d != pack_size {
-                return Err(str);
+            // Vulkan Version 1.0.
+            (vk::Format::R4G4B4A4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, RGBA, Norm),
+            (vk::Format::B4G4R4A4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, BGRA, Norm),
+            // Vulkan Version 1.3.
+            (vk::Format::A4R4G4B4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, ARGB, Norm),
+            (vk::Format::A4B4G4R4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, ABGR, Norm),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R5G6B5_UNORM_PACK16, 5, 6, 5, 0, 0, 0, false, true, RGB, Norm),
+            (vk::Format::B5G6R5_UNORM_PACK16, 5, 6, 5, 0, 0, 0, false, true, BGR, Norm),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R5G5B5A1_UNORM_PACK16, 5, 5, 5, 1, 0, 0, false, true, RGBA, Norm),
+            (vk::Format::B5G5R5A1_UNORM_PACK16, 5, 5, 5, 1, 0, 0, false, true, BGRA, Norm),
+            (vk::Format::A1R5G5B5_UNORM_PACK16, 5, 5, 5, 1, 0, 0, false, true, ARGB, Norm),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R8_UNORM, 8, 0, 0, 0, 0, 0, false, false, R, Norm),
+            (vk::Format::R8_SNORM, 8, 0, 0, 0, 0, 0, true, false, R, Norm),
+            (vk::Format::R8_USCALED, 8, 0, 0, 0, 0, 0, false, false, R, Scaled),
+            (vk::Format::R8_SSCALED, 8, 0, 0, 0, 0, 0, true, false, R, Scaled),
+            (vk::Format::R8_UINT, 8, 0, 0, 0, 0, 0, false, false, R, Int),
+            (vk::Format::R8_SINT, 8, 0, 0, 0, 0, 0, true, false, R, Int),
+            (vk::Format::R8_SRGB, 8, 0, 0, 0, 0, 0, false, false, R, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R8G8_UNORM, 8, 8, 0, 0, 0, 0, false, false, RG, Norm),
+            (vk::Format::R8G8_SNORM, 8, 8, 0, 0, 0, 0, true, false, RG, Norm),
+            (vk::Format::R8G8_USCALED, 8, 8, 0, 0, 0, 0, false, false, RG, Scaled),
+            (vk::Format::R8G8_SSCALED, 8, 8, 0, 0, 0, 0, true, false, RG, Scaled),
+            (vk::Format::R8G8_UINT, 8, 8, 0, 0, 0, 0, false, false, RG, Int),
+            (vk::Format::R8G8_SINT, 8, 8, 0, 0, 0, 0, true, false, RG, Int),
+            (vk::Format::R8G8_SRGB, 8, 8, 0, 0, 0, 0, false, false, RG, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R8G8B8_UNORM, 8, 8, 8, 0, 0, 0, false, false, RGB, Norm),
+            (vk::Format::R8G8B8_SNORM, 8, 8, 8, 0, 0, 0, true, false, RGB, Norm),
+            (vk::Format::R8G8B8_USCALED, 8, 8, 8, 0, 0, 0, false, false, RGB, Scaled),
+            (vk::Format::R8G8B8_SSCALED, 8, 8, 8, 0, 0, 0, true, false, RGB, Scaled),
+            (vk::Format::R8G8B8_UINT, 8, 8, 8, 0, 0, 0, false, false, RGB, Int),
+            (vk::Format::R8G8B8_SINT, 8, 8, 8, 0, 0, 0, true, false, RGB, Int),
+            (vk::Format::R8G8B8_SRGB, 8, 8, 8, 0, 0, 0, false, false, RGB, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::B8G8R8_UNORM, 8, 8, 8, 0, 0, 0, false, false, BGR, Norm),
+            (vk::Format::B8G8R8_SNORM, 8, 8, 8, 0, 0, 0, true, false, BGR, Norm),
+            (vk::Format::B8G8R8_USCALED, 8, 8, 8, 0, 0, 0, false, false, BGR, Scaled),
+            (vk::Format::B8G8R8_SSCALED, 8, 8, 8, 0, 0, 0, true, false, BGR, Scaled),
+            (vk::Format::B8G8R8_UINT, 8, 8, 8, 0, 0, 0, false, false, BGR, Int),
+            (vk::Format::B8G8R8_SINT, 8, 8, 8, 0, 0, 0, true, false, BGR, Int),
+            (vk::Format::B8G8R8_SRGB, 8, 8, 8, 0, 0, 0, false, false, BGR, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R8G8B8A8_UNORM, 8, 8, 8, 8, 0, 0, false, false, RGBA, Norm),
+            (vk::Format::R8G8B8A8_SNORM, 8, 8, 8, 8, 0, 0, true, false, RGBA, Norm),
+            (vk::Format::R8G8B8A8_USCALED, 8, 8, 8, 8, 0, 0, false, false, RGBA, Scaled),
+            (vk::Format::R8G8B8A8_SSCALED, 8, 8, 8, 8, 0, 0, true, false, RGBA, Scaled),
+            (vk::Format::R8G8B8A8_UINT, 8, 8, 8, 8, 0, 0, false, false, RGBA, Int),
+            (vk::Format::R8G8B8A8_SINT, 8, 8, 8, 8, 0, 0, true, false, RGBA, Int),
+            (vk::Format::R8G8B8A8_SRGB, 8, 8, 8, 8, 0, 0, false, false, RGBA, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::B8G8R8A8_UNORM, 8, 8, 8, 8, 0, 0, false, false, BGRA, Norm),
+            (vk::Format::B8G8R8A8_SNORM, 8, 8, 8, 8, 0, 0, true, false, BGRA, Norm),
+            (vk::Format::B8G8R8A8_USCALED, 8, 8, 8, 8, 0, 0, false, false, BGRA, Scaled),
+            (vk::Format::B8G8R8A8_SSCALED, 8, 8, 8, 8, 0, 0, true, false, BGRA, Scaled),
+            (vk::Format::B8G8R8A8_UINT, 8, 8, 8, 8, 0, 0, false, false, BGRA, Int),
+            (vk::Format::B8G8R8A8_SINT, 8, 8, 8, 8, 0, 0, true, false, BGRA, Int),
+            (vk::Format::B8G8R8A8_SRGB, 8, 8, 8, 8, 0, 0, false, false, BGRA, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::A8B8G8R8_UNORM_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, Norm),
+            (vk::Format::A8B8G8R8_SNORM_PACK32, 8, 8, 8, 8, 0, 0, true, true, ABGR, Norm),
+            (vk::Format::A8B8G8R8_USCALED_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, Scaled),
+            (vk::Format::A8B8G8R8_SSCALED_PACK32, 8, 8, 8, 8, 0, 0, true, true, ABGR, Scaled),
+            (vk::Format::A8B8G8R8_UINT_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, Int),
+            (vk::Format::A8B8G8R8_SINT_PACK32, 8, 8, 8, 8, 0, 0, true, true, ABGR, Int),
+            (vk::Format::A8B8G8R8_SRGB_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, SRGB),
+
+            // Vulkan Version 1.0.
+            (vk::Format::A2R10G10B10_UNORM_PACK32, 10, 10, 10, 2, 0, 0, false, true, ARGB, Norm),
+            (vk::Format::A2R10G10B10_SNORM_PACK32, 10, 10, 10, 2, 0, 0, true, true, ARGB, Norm),
+            (
+                vk::Format::A2R10G10B10_USCALED_PACK32,
+                10, 10, 10, 2, 0, 0,
+                false, true,
+                ARGB,
+                Scaled
+            ),
+            (vk::Format::A2R10G10B10_SSCALED_PACK32, 10, 10, 10, 2, 0, 0, true, true, ARGB, Scaled),
+            (vk::Format::A2R10G10B10_UINT_PACK32, 10, 10, 10, 2, 0, 0, false, true, ARGB, Int),
+            (vk::Format::A2R10G10B10_SINT_PACK32, 10, 10, 10, 2, 0, 0, true, true, ARGB, Int),
+
+            // Vulkan Version 1.0.
+            (vk::Format::A2B10G10R10_UNORM_PACK32, 10, 10, 10, 2, 0, 0, false, true, ABGR, Norm),
+            (vk::Format::A2B10G10R10_SNORM_PACK32, 10, 10, 10, 2, 0, 0, true, true, ABGR, Norm),
+            (
+                vk::Format::A2B10G10R10_USCALED_PACK32,
+                10, 10, 10, 2, 0, 0,
+                false, true,
+                ABGR,
+                Scaled),
+            (vk::Format::A2B10G10R10_SSCALED_PACK32, 10, 10, 10, 2, 0, 0, true, true, ABGR, Scaled),
+            (vk::Format::A2B10G10R10_UINT_PACK32, 10, 10, 10, 2, 0, 0, false, true, ABGR, Int),
+            (vk::Format::A2B10G10R10_SINT_PACK32, 10, 10, 10, 2, 0, 0, true, true, ABGR, Int),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R16_UNORM, 16, 0, 0, 0, 0, 0, false, false, R, Norm),
+            (vk::Format::R16_SNORM, 16, 0, 0, 0, 0, 0, true, false, R, Norm),
+            (vk::Format::R16_USCALED, 16, 0, 0, 0, 0, 0, false, false, R, Scaled),
+            (vk::Format::R16_SSCALED, 16, 0, 0, 0, 0, 0,true, false, R, Scaled),
+            (vk::Format::R16_UINT, 16, 0, 0, 0, 0, 0, false, false, R, Int),
+            (vk::Format::R16_SINT, 16, 0, 0, 0, 0, 0, true, false, R, Int),
+            (vk::Format::R16_SFLOAT, 16, 0, 0, 0, 0, 0, true, false, R, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R16G16_UNORM, 16, 16, 0, 0, 0, 0, false, false, RG, Norm),
+            (vk::Format::R16G16_SNORM, 16, 16, 0, 0, 0, 0, true, false, RG, Norm),
+            (vk::Format::R16G16_USCALED, 16, 16, 0, 0, 0, 0, false, false, RG, Scaled),
+            (vk::Format::R16G16_SSCALED, 16, 16, 0, 0, 0, 0, true, false, RG, Scaled),
+            (vk::Format::R16G16_UINT, 16, 16, 0, 0, 0, 0, false, false, RG, Int),
+            (vk::Format::R16G16_SINT, 16, 16, 0, 0, 0, 0, true, false, RG, Int),
+            (vk::Format::R16G16_SFLOAT, 16, 16, 0, 0, 0, 0, true, false, RG, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R16G16B16_UNORM, 16, 16, 16, 0, 0, 0, false, false, RGB, Norm),
+            (vk::Format::R16G16B16_SNORM, 16, 16, 16, 0, 0, 0, true, false, RGB, Norm),
+            (vk::Format::R16G16B16_USCALED, 16, 16, 16, 0, 0, 0, false, false, RGB, Scaled),
+            (vk::Format::R16G16B16_SSCALED, 16, 16, 16, 0, 0, 0, true, false, RGB, Scaled),
+            (vk::Format::R16G16B16_UINT, 16, 16, 16, 0, 0, 0, false, false, RGB, Int),
+            (vk::Format::R16G16B16_SINT, 16, 16, 16, 0, 0, 0, true, false, RGB, Int),
+            (vk::Format::R16G16B16_SFLOAT, 16, 16, 16, 0, 0, 0, true, false, RGB, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R16G16B16A16_UNORM, 16, 16, 16, 16, 0, 0, false, false, RGBA, Norm),
+            (vk::Format::R16G16B16A16_SNORM, 16, 16, 16, 16, 0, 0, true, false, RGBA, Norm),
+            (vk::Format::R16G16B16A16_USCALED, 16, 16, 16, 16, 0, 0, false, false, RGBA, Scaled),
+            (vk::Format::R16G16B16A16_SSCALED, 16, 16, 16, 16, 0, 0, true, false, RGBA, Scaled),
+            (vk::Format::R16G16B16A16_UINT, 16, 16, 16, 16, 0, 0, false, false, RGBA, Int),
+            (vk::Format::R16G16B16A16_SINT, 16, 16, 16, 16, 0, 0, true, false, RGBA, Int),
+            (vk::Format::R16G16B16A16_SFLOAT, 16, 16, 16, 16, 0, 0, true, false, RGBA, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R32_UINT, 32, 0, 0, 0, 0, 0, false, false, R, Int),
+            (vk::Format::R32_SINT, 32, 0, 0, 0, 0, 0, true, false, R, Int),
+            (vk::Format::R32_SFLOAT, 32, 0, 0, 0, 0, 0, true, false, R, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R32G32_UINT, 32, 32, 0, 0, 0, 0, false, false, RG, Int),
+            (vk::Format::R32G32_SINT, 32, 32, 0, 0, 0, 0, true, false, RG, Int),
+            (vk::Format::R32G32_SFLOAT, 32, 32, 0, 0, 0, 0, true, false, RG, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R32G32B32_UINT, 32, 32, 32, 0, 0, 0, false, false, RGB, Int),
+            (vk::Format::R32G32B32_SINT, 32, 32, 32, 0, 0, 0, true, false, RGB, Int),
+            (vk::Format::R32G32B32_SFLOAT, 32, 32, 32, 0, 0, 0, true, false, RGB, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R32G32B32A32_UINT, 32, 32, 32, 32, 0, 0, false, false, RGBA, Int),
+            (vk::Format::R32G32B32A32_SINT, 32, 32, 32, 32, 0, 0, true, false, RGBA, Int),
+            (vk::Format::R32G32B32A32_SFLOAT, 32, 32, 32, 32, 0, 0, true, false, RGBA, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R64_UINT, 64, 0, 0, 0, 0, 0, false, false, R, Int),
+            (vk::Format::R64_SINT, 64, 0, 0, 0, 0, 0, true, false, R, Int),
+            (vk::Format::R64_SFLOAT, 64, 0, 0, 0, 0, 0, true, false, R, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R64G64_UINT, 64, 64, 0, 0, 0, 0, false, false, RG, Int),
+            (vk::Format::R64G64_SINT, 64, 64, 0, 0, 0, 0, true, false, RG, Int),
+            (vk::Format::R64G64_SFLOAT, 64, 64, 0, 0, 0, 0, true, false, RG, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R64G64B64_UINT, 64, 64, 64, 0, 0, 0, false, false, RGB, Int),
+            (vk::Format::R64G64B64_SINT, 64, 64, 64, 0, 0, 0, true, false, RGB, Int),
+            (vk::Format::R64G64B64_SFLOAT, 64, 64, 64, 0, 0, 0, true, false, RGB, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::R64G64B64A64_UINT, 64, 64, 64, 64, 0, 0, false, false, RGBA, Int),
+            (vk::Format::R64G64B64A64_SINT, 64, 64, 64, 64, 0, 0, true, false, RGBA, Int),
+            (vk::Format::R64G64B64A64_SFLOAT, 64, 64, 64, 64, 0, 0, true, false, RGBA, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::B10G11R11_UFLOAT_PACK32, 11, 11, 10, 0, 0, 0, false, true, BGR, Float),
+
+            // Vulkan Version 1.0.
+            (vk::Format::D16_UNORM, 0, 0, 0, 0, 16, 0, false, false, D, Norm),
+            (vk::Format::X8_D24_UNORM_PACK32, 0, 0, 0, 0, 24, 8, false, true, XD, Norm),
+            (vk::Format::D32_SFLOAT, 0, 0, 0, 0, 32, 0, true, false, D, Float),
+
+            // Vulkan Version 1.1.
+            (vk::Format::R10X6_UNORM_PACK16, 10, 0, 0, 0, 0, 6, false, true, RX, Norm),
+            (vk::Format::R10X6G10X6_UNORM_2PACK16, 10, 10, 0, 0, 0, 12, false, true, RXGX, Norm),
+            (
+                vk::Format::R10X6G10X6B10X6A10X6_UNORM_4PACK16,
+                10, 10, 10, 10, 0, 24,
+                false, true,
+                RXGXBXAX,
+                Norm,
+            ),
+
+            // Vulkan Version 1.1.
+            (vk::Format::R12X4_UNORM_PACK16, 12, 0, 0, 0, 0, 4, false, true, RX, Norm),
+            (vk::Format::R12X4G12X4_UNORM_2PACK16, 12, 12, 0, 0, 0, 8, false, true, RXGX, Norm),
+            (
+                vk::Format::R12X4G12X4B12X4A12X4_UNORM_4PACK16,
+                12, 12, 12, 12, 0, 16,
+                false, true,
+                RXGXBXAX,
+                Norm,
+            ),
+        ];
+
+        for item in DATA {
+            if value == item.0 {
+                return Ok(RegularImageFormat {
+                    red_channel: item.1,
+                    green_channel: item.2,
+                    blue_channel: item.3,
+                    alpha_channel: item.4,
+                    depth_channel: item.5,
+                    unused_bits: item.6,
+                    signed: item.7,
+                    packed: item.8,
+                    order: item.9,
+                    data_conversion: item.10,
+                })
             }
-            if r % 8 != 0 || g % 8 != 0 || b % 8 != 0 || a % 8 != 0 || d % 8 != 0 {
-                return Err(str);
-            }
-            true
-        };
-
-        Ok(Self {
-            red_channel: r,
-            green_channel: g,
-            blue_channel: b,
-            alpha_channel: a,
-            depth_channel: d,
-            signed,
-            packed,
-            order,
-            data_conversion: conversion,
-        })
-    }
-}
-
-impl RegularImageFormat {
-    fn get_num_bits(chars: &mut std::iter::Peekable<std::str::Chars>) -> Option<u8> {
-        let mut current: u8 = match chars.next() {
-            None => return None,
-            Some(c) => match c.to_digit(10) {
-                None => return None,
-                Some(d) => d as u8,
-            },
-        };
-        loop {
-            match chars.peek() {
-                None => return Some(current),
-                Some(c) => match c.to_digit(10) {
-                    None => return None,
-                    Some(d) => current = current * 10 + d as u8,
-                },
-            }
-            chars.next();
         }
-    }
-
-    fn update_bit_count(count: &mut u8, chars: &mut std::iter::Peekable<std::str::Chars>) -> bool {
-        *count = match Self::get_num_bits(chars) {
-            None => return false,
-            Some(v) => {
-                if v == 0 || *count != 0 {
-                    return false;
-                }
-                v
-            }
-        };
-        true
-    }
-
-    fn get_order_string(
-        chars: &mut std::iter::Peekable<std::str::Chars>,
-        r: &mut u8,
-        g: &mut u8,
-        b: &mut u8,
-        a: &mut u8,
-        d: &mut u8,
-    ) -> Option<String> {
-        let mut order_string = String::new();
-        loop {
-            let next_char = chars.next()?;
-            match next_char {
-                'R' => {
-                    if Self::update_bit_count(r, chars) {
-                        order_string.push('R')
-                    } else {
-                        return None;
-                    }
-                }
-                'G' => {
-                    if Self::update_bit_count(g, chars) {
-                        order_string.push('G')
-                    } else {
-                        return None;
-                    }
-                }
-                'B' => {
-                    if Self::update_bit_count(b, chars) {
-                        order_string.push('B')
-                    } else {
-                        return None;
-                    }
-                }
-                'A' => {
-                    if Self::update_bit_count(a, chars) {
-                        order_string.push('A')
-                    } else {
-                        return None;
-                    }
-                }
-                'D' => {
-                    if Self::update_bit_count(d, chars) {
-                        order_string.push('D')
-                    } else {
-                        return None;
-                    }
-                }
-                '_' => break,
-                _ => return None,
-            }
-            order_string.push(next_char);
-        }
-        Some(order_string)
-    }
-
-    fn get_order_from_str(order_string: &str) -> Option<RegularImageFormatOrder> {
-        match order_string {
-            "R" => Some(RegularImageFormatOrder::R),
-            "A" => Some(RegularImageFormatOrder::A),
-            "D" => Some(RegularImageFormatOrder::D),
-            "RG" => Some(RegularImageFormatOrder::RG),
-            "RGB" => Some(RegularImageFormatOrder::RGB),
-            "BGR" => Some(RegularImageFormatOrder::BGR),
-            "RGBA" => Some(RegularImageFormatOrder::RGBA),
-            "BGRA" => Some(RegularImageFormatOrder::BGRA),
-            "ARGB" => Some(RegularImageFormatOrder::ARGB),
-            "ABGR" => Some(RegularImageFormatOrder::ABGR),
-            _ => None,
-        }
-    }
-
-    fn get_conversion_string(chars: &mut std::iter::Peekable<std::str::Chars>) -> String {
-        let mut conversion_string = String::new();
-        loop {
-            let next_char = match chars.next() {
-                None => break,
-                Some(c) => c,
-            };
-            match next_char {
-                '_' => break,
-                c => conversion_string.push(c),
-            }
-        }
-        conversion_string
-    }
-
-    fn get_conversion_from_str(conversion_string: &str) -> Option<RegularImageFormatConversion> {
-        match conversion_string {
-            "INT" => Some(RegularImageFormatConversion::Int),
-            "NORM" => Some(RegularImageFormatConversion::Norm),
-            "SCALED" => Some(RegularImageFormatConversion::Float),
-            _ => None,
-        }
-    }
-
-    fn get_packed_string(chars: &mut std::iter::Peekable<std::str::Chars>) -> Option<String> {
-        let mut packed_string = String::new();
-        loop {
-            let next_char = match chars.next() {
-                None => break,
-                Some(c) => c,
-            };
-            match next_char {
-                '_' => return None,
-                c => packed_string.push(c),
-            }
-        }
-        Some(packed_string)
+        Err(())
     }
 }
 
@@ -550,28 +596,39 @@ impl RegularImageFormat {
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegularImageFormatOrder {
     R,
-    A,
     D,
     RG,
+    RX,
+    XD,
     RGB,
     BGR,
     RGBA,
     BGRA,
     ARGB,
     ABGR,
+    RXGX,
+    RXGXBXAX,
 }
 
 /// This describes how the data gets converted when passed to the shader.
-#[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum RegularImageFormatConversion {
-    /// The data is given to the shaders as an integer directly.
+    /// The data is stored as an integer given to the shaders as an integer directly.
     Int,
 
-    /// The data is cast as a float, the value of which is equal to the value of the integer stored.
+    /// The data is stored as an integer, and cast as a float, the value of which is equal to the
+    /// value of the integer stored when passed to the shader.
+    Scaled,
+
+    /// The data is stored as an integer and cast as a float when passed to the shader.
+    /// The value of the cast float is normalized to between 0 and 1 inclusively for an unsigned
+    /// data type, and between -1 and 1 for a signed data type.
+    Norm,
+
+    /// The data is stored directly as a float type, and is passed as such to the shader.
     Float,
 
-    /// The data is cast as a float, the value of which is normalized to between 0 and 1 inclusively
-    /// for an unsigned data type, and between -1 and 1 for a signed data type.
-    Norm,
+    /// The values are interpreted using sRGB non-linear encoding.
+    /// Data with this type is always unsigned.
+    SRGB,
 }
