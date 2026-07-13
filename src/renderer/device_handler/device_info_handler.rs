@@ -33,7 +33,9 @@ pub struct DeviceInfo {
 
     /// The formats that can be rendered in.
     pub available_formats: Vec<Format>,
-    // pub presentation_modes: Vec<PresentationMode>
+
+    /// The presentation modes that are available.
+    pub presentation_modes: Vec<PresentationMode>
 }
 
 impl From<VulkanDisplayInfo> for DeviceInfo {
@@ -44,6 +46,11 @@ impl From<VulkanDisplayInfo> for DeviceInfo {
                 .formats
                 .into_iter()
                 .filter_map(|f| Format::try_from(f).ok())
+                .collect(),
+            presentation_modes: value
+                .presentation_modes
+                .into_iter()
+                .filter_map(|p| PresentationMode::try_from(p).ok())
                 .collect(),
         }
     }
@@ -174,6 +181,61 @@ impl TryFrom<vk::SurfaceFormatKHR> for Format {
                 Err(()) => return Err(FormatConversionError::ColourSpaceError(value.color_space)),
             },
         })
+    }
+}
+
+/// A way that the swapchain images are presented to the screen
+/// The only option that is required to be supported is FIFO.
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum PresentationMode {
+
+    /// When a new image is ready, it is presented immediately, and does not wait for the vertical
+    /// blanking period to update, which may result in visible tearing.
+    /// No internal queuing of presentation requests is needed.
+    Immediate,
+
+    /// When a new image is waiting, the image waits for the next vertical blanking period.
+    /// This prevents any tearing.
+    /// Internally, a queue sized to fit one image is used to hold the presentation requests.
+    /// Any new entries to the queue when the queue is full, the new entry replaces the one already
+    /// in the queue, making any images associated with the prior entry available for reuse.
+    /// One request is removed from the queue whenever the queue is not empty for every vertical
+    /// blanking interval.
+    Mailbox,
+
+    /// The images are held in a queue, each vertical blanking period, the image from the front of
+    /// the queue is presented.
+    /// One request is removed from the queue whenever the queue is not empty for every vertical
+    /// blanking interval.
+    FIFO,
+
+    /// The images are held in a queue, and new ones are added to the end.
+    /// The vulkan presentation engine will generally wait for the next vertical blanking period to
+    /// update the current image.
+    /// If the previous vertical blanking period passed with no new image in the queue to present,
+    /// then the next image to reach the queue will be presented immediately.
+    /// This will reduce potential stuttering, but may result in some visible tearing.
+    ///
+    FIFORelaxed,
+}
+
+impl TryFrom<vk::PresentModeKHR> for PresentationMode {
+    type Error = vk::PresentModeKHR;
+
+    fn try_from(value: vk::PresentModeKHR) -> Result<Self, Self::Error> {
+        match value {
+            vk::PresentModeKHR::IMMEDIATE => Ok(PresentationMode::Immediate),
+            vk::PresentModeKHR::MAILBOX => Ok(PresentationMode::Mailbox),
+            vk::PresentModeKHR::FIFO => Ok(PresentationMode::FIFO),
+            vk::PresentModeKHR::FIFO_RELAXED => Ok(PresentationMode::FIFORelaxed),
+
+            // Not Supported
+            vk::PresentModeKHR::SHARED_DEMAND_REFRESH => Err(value),
+            vk::PresentModeKHR::SHARED_CONTINUOUS_REFRESH => Err(value),
+
+            _ => Err(value)
+        }
     }
 }
 
