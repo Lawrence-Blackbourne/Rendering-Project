@@ -2,9 +2,11 @@
 //! receives into useful information for the library user.
 //! The module also contains structs helpful for setting up the device.
 
+mod regular_image_format_conversion_data;
+
 use crate::renderer::Size;
-use RegularImageFormatConversion::{Float, Int, Norm, SRGB, Scaled};
-use RegularImageFormatOrder::{ABGR, ARGB, BGR, BGRA, D, R, RG, RGB, RGBA, RX, RXGX, RXGXBXAX, XD};
+use regular_image_format_conversion_data::REGULAR_IMAGE_FORMAT_CONVERSION_DATA;
+
 use ash::vk;
 
 /// A struct holding a potential physical device in a way that is easily usable.
@@ -35,7 +37,7 @@ pub struct DeviceInfo {
     pub available_formats: Vec<Format>,
 
     /// The presentation modes that are available.
-    pub presentation_modes: Vec<PresentationMode>
+    pub presentation_modes: Vec<PresentationMode>,
 }
 
 impl From<VulkanDisplayInfo> for DeviceInfo {
@@ -189,7 +191,6 @@ impl TryFrom<vk::SurfaceFormatKHR> for Format {
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PresentationMode {
-
     /// When a new image is ready, it is presented immediately, and does not wait for the vertical
     /// blanking period to update, which may result in visible tearing.
     /// No internal queuing of presentation requests is needed.
@@ -216,7 +217,6 @@ pub enum PresentationMode {
     /// If the previous vertical blanking period passed with no new image in the queue to present,
     /// then the next image to reach the queue will be presented immediately.
     /// This will reduce potential stuttering, but may result in some visible tearing.
-    ///
     FIFORelaxed,
 }
 
@@ -234,7 +234,7 @@ impl TryFrom<vk::PresentModeKHR> for PresentationMode {
             vk::PresentModeKHR::SHARED_DEMAND_REFRESH => Err(value),
             vk::PresentModeKHR::SHARED_CONTINUOUS_REFRESH => Err(value),
 
-            _ => Err(value)
+            _ => Err(value),
         }
     }
 }
@@ -435,6 +435,7 @@ impl TryFrom<vk::Format> for ImageFormat {
 }
 
 /// An enum used in the conversion from vk::SurfaceFormatKHR to Format.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FormatConversionError {
     ImageFormatError(vk::Format),
     ColourSpaceError(vk::ColorSpaceKHR),
@@ -460,7 +461,7 @@ pub struct RegularImageFormat {
     /// The number of bits in the depth channel.
     pub depth_channel: u8,
 
-    /// The unused bits of the structure, which are optionally available for other uses
+    /// The unused bits of the structure.
     pub unused_bits: u8,
 
     /// Stores if the data channels are signed or not.
@@ -522,7 +523,6 @@ pub enum RegularImageFormatOrder {
     D,
     RG,
     RX,
-    XD,
     RGB,
     BGR,
     RGBA,
@@ -556,219 +556,510 @@ pub enum RegularImageFormatConversion {
     SRGB,
 }
 
-// rustfmt::skip is used here to avoid cargo fmt from splitting every element over many
-// lines, causing this code block to become incredibly long.
-#[rustfmt::skip]
-const REGULAR_IMAGE_FORMAT_CONVERSION_DATA: &[(
-    vk::Format,
-    u8, u8, u8, u8, u8, u8,
-    bool, bool,
-    RegularImageFormatOrder,
-    RegularImageFormatConversion
-)] = &[
-    // Vulkan Version 1.0.
-    (vk::Format::R4G4_UNORM_PACK8, 4, 4, 0, 0, 0, 0, false, true, RG, Norm),
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use RegularImageFormatConversion::{Float, Int, Norm, SRGB, Scaled};
+    use RegularImageFormatOrder::{ABGR, ARGB, BGR, BGRA, D, R, RG, RGB, RGBA, RX, RXGX, RXGXBXAX};
 
-    // Vulkan Version 1.0.
-    (vk::Format::R4G4B4A4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, RGBA, Norm),
-    (vk::Format::B4G4R4A4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, BGRA, Norm),
-    // Vulkan Version 1.3.
-    (vk::Format::A4R4G4B4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, ARGB, Norm),
-    (vk::Format::A4B4G4R4_UNORM_PACK16, 4, 4, 4, 4, 0, 0, false, true, ABGR, Norm),
+    #[test]
+    fn test_try_into_format() {
+        for test in INTO_FORMAT_TEST_DATA {
+            assert_eq!(Format::try_from(test.0), test.1)
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R5G6B5_UNORM_PACK16, 5, 6, 5, 0, 0, 0, false, true, RGB, Norm),
-    (vk::Format::B5G6R5_UNORM_PACK16, 5, 6, 5, 0, 0, 0, false, true, BGR, Norm),
+    #[test]
+    fn test_try_into_presentation_mode() {
+        // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
+        // of lines.
+        #[rustfmt::skip]
+        let test_data = &[
+            (vk::PresentModeKHR::IMMEDIATE, Ok(PresentationMode::Immediate)),
+            (vk::PresentModeKHR::MAILBOX, Ok(PresentationMode::Mailbox)),
+            (vk::PresentModeKHR::FIFO, Ok(PresentationMode::FIFO)),
+            (vk::PresentModeKHR::FIFO_RELAXED, Ok(PresentationMode::FIFORelaxed)),
+            (
+                vk::PresentModeKHR::SHARED_DEMAND_REFRESH,
+                Err(vk::PresentModeKHR::SHARED_DEMAND_REFRESH)
+            ),
+            (
+                vk::PresentModeKHR::SHARED_CONTINUOUS_REFRESH,
+                Err(vk::PresentModeKHR::SHARED_CONTINUOUS_REFRESH)
+            ),
+            (vk::PresentModeKHR::from_raw(-1), Err(vk::PresentModeKHR::from_raw(-1))),
+        ];
+        for test in test_data {
+            assert_eq!(PresentationMode::try_from(test.0), test.1)
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R5G5B5A1_UNORM_PACK16, 5, 5, 5, 1, 0, 0, false, true, RGBA, Norm),
-    (vk::Format::B5G5R5A1_UNORM_PACK16, 5, 5, 5, 1, 0, 0, false, true, BGRA, Norm),
-    (vk::Format::A1R5G5B5_UNORM_PACK16, 5, 5, 5, 1, 0, 0, false, true, ARGB, Norm),
+    #[test]
+    fn test_into_image_transformations() {
+        for test in INTO_TRANSFORMATION_TEST_DATA {
+            assert_eq!(
+                ImageTransformations::from(test.0),
+                ImageTransformations {
+                    identity: test.1,
+                    rotate_90_degrees: test.2,
+                    rotate_180_degrees: test.3,
+                    rotate_270_degrees: test.4,
+                    mirror: test.5,
+                    mirror_and_rotate_90_degrees: test.6,
+                    mirror_and_rotate_180_degrees: test.7,
+                    mirror_and_rotate_270_degrees: test.8,
+                    inherit: test.9,
+                }
+            )
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R8_UNORM, 8, 0, 0, 0, 0, 0, false, false, R, Norm),
-    (vk::Format::R8_SNORM, 8, 0, 0, 0, 0, 0, true, false, R, Norm),
-    (vk::Format::R8_USCALED, 8, 0, 0, 0, 0, 0, false, false, R, Scaled),
-    (vk::Format::R8_SSCALED, 8, 0, 0, 0, 0, 0, true, false, R, Scaled),
-    (vk::Format::R8_UINT, 8, 0, 0, 0, 0, 0, false, false, R, Int),
-    (vk::Format::R8_SINT, 8, 0, 0, 0, 0, 0, true, false, R, Int),
-    (vk::Format::R8_SRGB, 8, 0, 0, 0, 0, 0, false, false, R, SRGB),
+    #[test]
+    fn test_into_alpha_compositing_modes() {
+        // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
+        // of lines.
+        #[rustfmt::skip]
+        let test_data = &[
+            (vk::CompositeAlphaFlagsKHR::from_raw(0), false, false, false, false),
+            (vk::CompositeAlphaFlagsKHR::OPAQUE, true, false, false, false),
+            (vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED, false, true, false, false),
+            (vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED, false, false, true, false),
+            (vk::CompositeAlphaFlagsKHR::INHERIT, false, false, false, true),
+            (vk::CompositeAlphaFlagsKHR::from_raw(0xffffffff), true, true, true, true),
+        ];
+        for test in test_data {
+            assert_eq!(
+                AlphaCompositingModes::from(test.0),
+                AlphaCompositingModes {
+                    opaque: test.1,
+                    pre_multiplied: test.2,
+                    post_multiplied: test.3,
+                    inherit: test.4,
+                }
+            )
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R8G8_UNORM, 8, 8, 0, 0, 0, 0, false, false, RG, Norm),
-    (vk::Format::R8G8_SNORM, 8, 8, 0, 0, 0, 0, true, false, RG, Norm),
-    (vk::Format::R8G8_USCALED, 8, 8, 0, 0, 0, 0, false, false, RG, Scaled),
-    (vk::Format::R8G8_SSCALED, 8, 8, 0, 0, 0, 0, true, false, RG, Scaled),
-    (vk::Format::R8G8_UINT, 8, 8, 0, 0, 0, 0, false, false, RG, Int),
-    (vk::Format::R8G8_SINT, 8, 8, 0, 0, 0, 0, true, false, RG, Int),
-    (vk::Format::R8G8_SRGB, 8, 8, 0, 0, 0, 0, false, false, RG, SRGB),
+    #[test]
+    fn test_into_image_usages() {
+        // WHEN UPDATING THIS ADD TESTS FOR THE SPECIFIC ITEMS IN IMAGE USAGES TO TEST EACH
+        // INDIVIDUAL FLAGS.
+        // Use something like the test above.
+        assert_eq!(
+            ImageUsages {},
+            ImageUsages::from(vk::ImageUsageFlags::from_raw(0xffffffff))
+        )
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R8G8B8_UNORM, 8, 8, 8, 0, 0, 0, false, false, RGB, Norm),
-    (vk::Format::R8G8B8_SNORM, 8, 8, 8, 0, 0, 0, true, false, RGB, Norm),
-    (vk::Format::R8G8B8_USCALED, 8, 8, 8, 0, 0, 0, false, false, RGB, Scaled),
-    (vk::Format::R8G8B8_SSCALED, 8, 8, 8, 0, 0, 0, true, false, RGB, Scaled),
-    (vk::Format::R8G8B8_UINT, 8, 8, 8, 0, 0, 0, false, false, RGB, Int),
-    (vk::Format::R8G8B8_SINT, 8, 8, 8, 0, 0, 0, true, false, RGB, Int),
-    (vk::Format::R8G8B8_SRGB, 8, 8, 8, 0, 0, 0, false, false, RGB, SRGB),
+    #[test]
+    fn test_try_into_colour_spaces() {
+        // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
+        // of lines.
+        #[rustfmt::skip]
+        let test_data = &[
+            (vk::ColorSpaceKHR::SRGB_NONLINEAR, Ok(ColourSpace::NonLinearSRGB)),
+            (vk::ColorSpaceKHR::DISPLAY_P3_NONLINEAR_EXT, Ok(ColourSpace::NonLinearDisplayP3)),
+            (vk::ColorSpaceKHR::EXTENDED_SRGB_LINEAR_EXT, Ok(ColourSpace::LinearExtendedSRGB)),
+            (
+                vk::ColorSpaceKHR::EXTENDED_SRGB_NONLINEAR_EXT,
+                Ok(ColourSpace::NonLinearExtendedSRGB)
+            ),
+            (vk::ColorSpaceKHR::DISPLAY_P3_LINEAR_EXT, Ok(ColourSpace::LinearDisplayP3)),
+            (vk::ColorSpaceKHR::DCI_P3_NONLINEAR_EXT, Ok(ColourSpace::NonLinearDCIP3)),
+            (vk::ColorSpaceKHR::BT709_LINEAR_EXT, Ok(ColourSpace::LinearBT709)),
+            (vk::ColorSpaceKHR::BT709_NONLINEAR_EXT, Ok(ColourSpace::NonLinearBT709)),
+            (vk::ColorSpaceKHR::BT2020_LINEAR_EXT, Ok(ColourSpace::LinearBT2020)),
+            (vk::ColorSpaceKHR::HDR10_ST2084_EXT, Ok(ColourSpace::NonLinearBT2020UsingST2084)),
+            (vk::ColorSpaceKHR::HDR10_HLG_EXT, Ok(ColourSpace::NonLinearBT2020UsingHLG)),
+            (vk::ColorSpaceKHR::ADOBERGB_LINEAR_EXT, Ok(ColourSpace::LinearAdobeRGB)),
+            (vk::ColorSpaceKHR::ADOBERGB_NONLINEAR_EXT, Ok(ColourSpace::NonLinearAdobeRGB)),
+            (vk::ColorSpaceKHR::PASS_THROUGH_EXT, Ok(ColourSpace::PassThrough)),
+            (vk::ColorSpaceKHR::DISPLAY_NATIVE_AMD, Ok(ColourSpace::Native)),
+            (vk::ColorSpaceKHR::DOLBYVISION_EXT, Err(())),
+            (vk::ColorSpaceKHR::from_raw(-1), Err(())),
+        ];
+        for test in test_data {
+            assert_eq!(ColourSpace::try_from(test.0), test.1)
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::B8G8R8_UNORM, 8, 8, 8, 0, 0, 0, false, false, BGR, Norm),
-    (vk::Format::B8G8R8_SNORM, 8, 8, 8, 0, 0, 0, true, false, BGR, Norm),
-    (vk::Format::B8G8R8_USCALED, 8, 8, 8, 0, 0, 0, false, false, BGR, Scaled),
-    (vk::Format::B8G8R8_SSCALED, 8, 8, 8, 0, 0, 0, true, false, BGR, Scaled),
-    (vk::Format::B8G8R8_UINT, 8, 8, 8, 0, 0, 0, false, false, BGR, Int),
-    (vk::Format::B8G8R8_SINT, 8, 8, 8, 0, 0, 0, true, false, BGR, Int),
-    (vk::Format::B8G8R8_SRGB, 8, 8, 8, 0, 0, 0, false, false, BGR, SRGB),
+    #[test]
+    fn can_create_image_format_using_regular_image_format() {
+        let result = ImageFormat::try_from(vk::Format::R4G4_UNORM_PACK8);
+        assert_eq!(
+            result,
+            Ok(ImageFormat::RegularFormat(RegularImageFormat {
+                red_channel: 4,
+                green_channel: 4,
+                blue_channel: 0,
+                alpha_channel: 0,
+                depth_channel: 0,
+                unused_bits: 0,
+                signed: false,
+                packed: true,
+                order: RG,
+                data_conversion: Norm,
+            })),
+        )
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R8G8B8A8_UNORM, 8, 8, 8, 8, 0, 0, false, false, RGBA, Norm),
-    (vk::Format::R8G8B8A8_SNORM, 8, 8, 8, 8, 0, 0, true, false, RGBA, Norm),
-    (vk::Format::R8G8B8A8_USCALED, 8, 8, 8, 8, 0, 0, false, false, RGBA, Scaled),
-    (vk::Format::R8G8B8A8_SSCALED, 8, 8, 8, 8, 0, 0, true, false, RGBA, Scaled),
-    (vk::Format::R8G8B8A8_UINT, 8, 8, 8, 8, 0, 0, false, false, RGBA, Int),
-    (vk::Format::R8G8B8A8_SINT, 8, 8, 8, 8, 0, 0, true, false, RGBA, Int),
-    (vk::Format::R8G8B8A8_SRGB, 8, 8, 8, 8, 0, 0, false, false, RGBA, SRGB),
+    #[test]
+    fn cannot_create_image_format_from_invalid_format() {
+        assert_eq!(ImageFormat::try_from(vk::Format::from_raw(-1)), Err(()));
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::B8G8R8A8_UNORM, 8, 8, 8, 8, 0, 0, false, false, BGRA, Norm),
-    (vk::Format::B8G8R8A8_SNORM, 8, 8, 8, 8, 0, 0, true, false, BGRA, Norm),
-    (vk::Format::B8G8R8A8_USCALED, 8, 8, 8, 8, 0, 0, false, false, BGRA, Scaled),
-    (vk::Format::B8G8R8A8_SSCALED, 8, 8, 8, 8, 0, 0, true, false, BGRA, Scaled),
-    (vk::Format::B8G8R8A8_UINT, 8, 8, 8, 8, 0, 0, false, false, BGRA, Int),
-    (vk::Format::B8G8R8A8_SINT, 8, 8, 8, 8, 0, 0, true, false, BGRA, Int),
-    (vk::Format::B8G8R8A8_SRGB, 8, 8, 8, 8, 0, 0, false, false, BGRA, SRGB),
+    #[test]
+    fn cannot_create_image_format_from_undefined_format() {
+        assert_eq!(ImageFormat::try_from(vk::Format::UNDEFINED), Err(()));
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::A8B8G8R8_UNORM_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, Norm),
-    (vk::Format::A8B8G8R8_SNORM_PACK32, 8, 8, 8, 8, 0, 0, true, true, ABGR, Norm),
-    (vk::Format::A8B8G8R8_USCALED_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, Scaled),
-    (vk::Format::A8B8G8R8_SSCALED_PACK32, 8, 8, 8, 8, 0, 0, true, true, ABGR, Scaled),
-    (vk::Format::A8B8G8R8_UINT_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, Int),
-    (vk::Format::A8B8G8R8_SINT_PACK32, 8, 8, 8, 8, 0, 0, true, true, ABGR, Int),
-    (vk::Format::A8B8G8R8_SRGB_PACK32, 8, 8, 8, 8, 0, 0, false, true, ABGR, SRGB),
+    #[test]
+    fn cannot_create_image_format_from_unimplemented_format() {
+        assert_eq!(
+            ImageFormat::try_from(vk::Format::EAC_R11G11_UNORM_BLOCK),
+            Err(())
+        );
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::A2R10G10B10_UNORM_PACK32, 10, 10, 10, 2, 0, 0, false, true, ARGB, Norm),
-    (vk::Format::A2R10G10B10_SNORM_PACK32, 10, 10, 10, 2, 0, 0, true, true, ARGB, Norm),
-    (vk::Format::A2R10G10B10_USCALED_PACK32, 10, 10, 10, 2, 0, 0, false, true, ARGB, Scaled),
-    (vk::Format::A2R10G10B10_SSCALED_PACK32, 10, 10, 10, 2, 0, 0, true, true, ARGB, Scaled),
-    (vk::Format::A2R10G10B10_UINT_PACK32, 10, 10, 10, 2, 0, 0, false, true, ARGB, Int),
-    (vk::Format::A2R10G10B10_SINT_PACK32, 10, 10, 10, 2, 0, 0, true, true, ARGB, Int),
+    #[test]
+    fn test_try_into_image_format() {
+        for test in INTO_IMAGE_FORMAT_TEST_DATA {
+            assert_eq!(ImageFormat::try_from(test.0), test.1);
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::A2B10G10R10_UNORM_PACK32, 10, 10, 10, 2, 0, 0, false, true, ABGR, Norm),
-    (vk::Format::A2B10G10R10_SNORM_PACK32, 10, 10, 10, 2, 0, 0, true, true, ABGR, Norm),
-    (vk::Format::A2B10G10R10_USCALED_PACK32, 10, 10, 10, 2, 0, 0, false, true, ABGR, Scaled),
-    (vk::Format::A2B10G10R10_SSCALED_PACK32, 10, 10, 10, 2, 0, 0, true, true, ABGR, Scaled),
-    (vk::Format::A2B10G10R10_UINT_PACK32, 10, 10, 10, 2, 0, 0, false, true, ABGR, Int),
-    (vk::Format::A2B10G10R10_SINT_PACK32, 10, 10, 10, 2, 0, 0, true, true, ABGR, Int),
+    #[test]
+    fn test_try_into_regular_image_format() {
+        let last = REGULAR_IMAGE_FORMAT_CONVERSION_DATA.len() - 1;
 
-    // Vulkan Version 1.0.
-    (vk::Format::R16_UNORM, 16, 0, 0, 0, 0, 0, false, false, R, Norm),
-    (vk::Format::R16_SNORM, 16, 0, 0, 0, 0, 0, true, false, R, Norm),
-    (vk::Format::R16_USCALED, 16, 0, 0, 0, 0, 0, false, false, R, Scaled),
-    (vk::Format::R16_SSCALED, 16, 0, 0, 0, 0, 0,true, false, R, Scaled),
-    (vk::Format::R16_UINT, 16, 0, 0, 0, 0, 0, false, false, R, Int),
-    (vk::Format::R16_SINT, 16, 0, 0, 0, 0, 0, true, false, R, Int),
-    (vk::Format::R16_SFLOAT, 16, 0, 0, 0, 0, 0, true, false, R, Float),
+        // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
+        // of lines.
+        // Data format is (vk::Format, passes, red, green, blue, alpha, depth, unused, signed,
+        // packed, order, conversion).
+        #[rustfmt::skip]
+        let test_data = &[
+            (vk::Format::R8_SNORM, true, 8, 0, 0, 0, 0, 0, true, false, R, Norm),
+            (vk::Format::R5G6B5_UNORM_PACK16, true, 5, 6, 5, 0, 0, 0, false, true, RGB, Norm),
+            (
+                vk::Format::R10X6G10X6B10X6A10X6_UNORM_4PACK16,
+                true, 10, 10, 10, 10, 0, 24, false, true, RXGXBXAX, Norm,
+            ),
+            (vk::Format::D32_SFLOAT, true, 0, 0, 0, 0, 32, 0, true, false, D, Float),
+            (
+                REGULAR_IMAGE_FORMAT_CONVERSION_DATA[0].0,
+                true, 4, 4, 0, 0, 0, 0, false, true, RG, Norm
+            ),
+            (
+                REGULAR_IMAGE_FORMAT_CONVERSION_DATA[last].0,
+                true, 12, 12, 12, 12, 0, 16, false, true, RXGXBXAX, Norm,
+            ),
+            (vk::Format::R12X4_UNORM_PACK16_KHR, true, 12, 0, 0, 0, 0, 4, false, true, RX, Norm),
+            (vk::Format::from_raw(-1), false, 0, 0, 0, 0, 0, 0, false, false, R, Int),
+            (vk::Format::UNDEFINED, false, 0, 0, 0, 0, 0, 0, false, false, R, Int),
+            (vk::Format::EAC_R11G11_UNORM_BLOCK, false, 0, 0, 0, 0, 0, 0, false, false, R, Int),
+        ];
+        for test in test_data {
+            if test.1 == true {
+                assert_eq!(
+                    RegularImageFormat::try_from(test.0),
+                    Ok(RegularImageFormat {
+                        red_channel: test.2,
+                        green_channel: test.3,
+                        blue_channel: test.4,
+                        alpha_channel: test.5,
+                        depth_channel: test.6,
+                        unused_bits: test.7,
+                        signed: test.8,
+                        packed: test.9,
+                        order: test.10,
+                        data_conversion: test.11,
+                    }),
+                )
+            } else {
+                assert_eq!(RegularImageFormat::try_from(test.0), Err(()))
+            }
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R16G16_UNORM, 16, 16, 0, 0, 0, 0, false, false, RG, Norm),
-    (vk::Format::R16G16_SNORM, 16, 16, 0, 0, 0, 0, true, false, RG, Norm),
-    (vk::Format::R16G16_USCALED, 16, 16, 0, 0, 0, 0, false, false, RG, Scaled),
-    (vk::Format::R16G16_SSCALED, 16, 16, 0, 0, 0, 0, true, false, RG, Scaled),
-    (vk::Format::R16G16_UINT, 16, 16, 0, 0, 0, 0, false, false, RG, Int),
-    (vk::Format::R16G16_SINT, 16, 16, 0, 0, 0, 0, true, false, RG, Int),
-    (vk::Format::R16G16_SFLOAT, 16, 16, 0, 0, 0, 0, true, false, RG, Float),
+    #[test]
+    fn regular_image_format_conversion_data_correct() {
+        for format in REGULAR_IMAGE_FORMAT_CONVERSION_DATA {
+            let correct = format.0;
+            let correct_data = get_regular_image_format_stats(format!("{correct:?}")).unwrap();
+            assert_eq!(
+                *format,
+                (
+                    correct,
+                    correct_data.0[0],
+                    correct_data.0[1],
+                    correct_data.0[2],
+                    correct_data.0[3],
+                    correct_data.0[4],
+                    correct_data.0[5],
+                    correct_data.1,
+                    correct_data.2,
+                    correct_data.3,
+                    correct_data.4,
+                )
+            );
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R16G16B16_UNORM, 16, 16, 16, 0, 0, 0, false, false, RGB, Norm),
-    (vk::Format::R16G16B16_SNORM, 16, 16, 16, 0, 0, 0, true, false, RGB, Norm),
-    (vk::Format::R16G16B16_USCALED, 16, 16, 16, 0, 0, 0, false, false, RGB, Scaled),
-    (vk::Format::R16G16B16_SSCALED, 16, 16, 16, 0, 0, 0, true, false, RGB, Scaled),
-    (vk::Format::R16G16B16_UINT, 16, 16, 16, 0, 0, 0, false, false, RGB, Int),
-    (vk::Format::R16G16B16_SINT, 16, 16, 16, 0, 0, 0, true, false, RGB, Int),
-    (vk::Format::R16G16B16_SFLOAT, 16, 16, 16, 0, 0, 0, true, false, RGB, Float),
+    // We did not use this for the actual code, as a change to how debug works for vk::Format, which
+    // would be considered a non-breaking change, would break our code.
+    // It is fine here as worst case these tests stops working and get fixed with no impact on
+    // actual prod code.
+    fn get_regular_image_format_stats(
+        name: String,
+    ) -> Option<(
+        [u8; 6],
+        bool,
+        bool,
+        RegularImageFormatOrder,
+        RegularImageFormatConversion,
+    )> {
+        let mut words = name.split('_');
 
-    // Vulkan Version 1.0.
-    (vk::Format::R16G16B16A16_UNORM, 16, 16, 16, 16, 0, 0, false, false, RGBA, Norm),
-    (vk::Format::R16G16B16A16_SNORM, 16, 16, 16, 16, 0, 0, true, false, RGBA, Norm),
-    (vk::Format::R16G16B16A16_USCALED, 16, 16, 16, 16, 0, 0, false, false, RGBA, Scaled),
-    (vk::Format::R16G16B16A16_SSCALED, 16, 16, 16, 16, 0, 0, true, false, RGBA, Scaled),
-    (vk::Format::R16G16B16A16_UINT, 16, 16, 16, 16, 0, 0, false, false, RGBA, Int),
-    (vk::Format::R16G16B16A16_SINT, 16, 16, 16, 16, 0, 0, true, false, RGBA, Int),
-    (vk::Format::R16G16B16A16_SFLOAT, 16, 16, 16, 16, 0, 0, true, false, RGBA, Float),
+        let mut channels = [0, 0, 0, 0, 0, 0];
+        let mut first_word = words.next()?.chars().peekable();
+        let mut format_order_string = String::new();
+        loop {
+            match first_word.next() {
+                Some('R') => {
+                    channels[0] += get_number_from_char_iterator(&mut first_word);
+                    format_order_string.push('R')
+                }
+                Some('G') => {
+                    channels[1] += get_number_from_char_iterator(&mut first_word);
+                    format_order_string.push('G')
+                }
+                Some('B') => {
+                    channels[2] += get_number_from_char_iterator(&mut first_word);
+                    format_order_string.push('B')
+                }
+                Some('A') => {
+                    channels[3] += get_number_from_char_iterator(&mut first_word);
+                    format_order_string.push('A')
+                }
+                Some('D') => {
+                    channels[4] += get_number_from_char_iterator(&mut first_word);
+                    format_order_string.push('D')
+                }
+                Some('X') => {
+                    channels[5] += get_number_from_char_iterator(&mut first_word);
+                    format_order_string.push('X')
+                }
+                Some(_) => return None,
+                None => break,
+            }
+        }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R32_UINT, 32, 0, 0, 0, 0, 0, false, false, R, Int),
-    (vk::Format::R32_SINT, 32, 0, 0, 0, 0, 0, true, false, R, Int),
-    (vk::Format::R32_SFLOAT, 32, 0, 0, 0, 0, 0, true, false, R, Float),
+        let order = match format_order_string.as_str() {
+            "R" => R,
+            "D" => D,
+            "RG" => RG,
+            "RX" => RX,
+            "RGB" => RGB,
+            "BGR" => BGR,
+            "RGBA" => RGBA,
+            "BGRA" => BGRA,
+            "ARGB" => ARGB,
+            "ABGR" => ABGR,
+            "RXGX" => RXGX,
+            "RXGXBXAX" => RXGXBXAX,
+            _ => return None,
+        };
 
-    // Vulkan Version 1.0.
-    (vk::Format::R32G32_UINT, 32, 32, 0, 0, 0, 0, false, false, RG, Int),
-    (vk::Format::R32G32_SINT, 32, 32, 0, 0, 0, 0, true, false, RG, Int),
-    (vk::Format::R32G32_SFLOAT, 32, 32, 0, 0, 0, 0, true, false, RG, Float),
+        let (signed, conversion) = match words.next()? {
+            "UINT" => (false, Int),
+            "SINT" => (true, Int),
+            "USCALED" => (false, Scaled),
+            "SSCALED" => (true, Scaled),
+            "UNORM" => (false, Norm),
+            "SNORM" => (true, Norm),
+            "UFLOAT" => (false, Float),
+            "SFLOAT" => (true, Float),
+            "SRGB" => (false, SRGB),
+            _ => return None,
+        };
 
-    // Vulkan Version 1.0.
-    (vk::Format::R32G32B32_UINT, 32, 32, 32, 0, 0, 0, false, false, RGB, Int),
-    (vk::Format::R32G32B32_SINT, 32, 32, 32, 0, 0, 0, true, false, RGB, Int),
-    (vk::Format::R32G32B32_SFLOAT, 32, 32, 32, 0, 0, 0, true, false, RGB, Float),
+        let packed = match words.next() {
+            Some("PACK8") => true,
+            Some("PACK16") => true,
+            Some("2PACK16") => true,
+            Some("4PACK16") => true,
+            Some("PACK32") => true,
+            Some(_) => return None,
+            None => false,
+        };
 
-    // Vulkan Version 1.0.
-    (vk::Format::R32G32B32A32_UINT, 32, 32, 32, 32, 0, 0, false, false, RGBA, Int),
-    (vk::Format::R32G32B32A32_SINT, 32, 32, 32, 32, 0, 0, true, false, RGBA, Int),
-    (vk::Format::R32G32B32A32_SFLOAT, 32, 32, 32, 32, 0, 0, true, false, RGBA, Float),
+        if words.next() != None {
+            return None;
+        }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R64_UINT, 64, 0, 0, 0, 0, 0, false, false, R, Int),
-    (vk::Format::R64_SINT, 64, 0, 0, 0, 0, 0, true, false, R, Int),
-    (vk::Format::R64_SFLOAT, 64, 0, 0, 0, 0, 0, true, false, R, Float),
+        Some((channels, signed, packed, order, conversion))
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R64G64_UINT, 64, 64, 0, 0, 0, 0, false, false, RG, Int),
-    (vk::Format::R64G64_SINT, 64, 64, 0, 0, 0, 0, true, false, RG, Int),
-    (vk::Format::R64G64_SFLOAT, 64, 64, 0, 0, 0, 0, true, false, RG, Float),
+    fn get_number_from_char_iterator(chars: &mut std::iter::Peekable<std::str::Chars>) -> u8 {
+        let mut val: u8 = 0;
+        loop {
+            match chars.peek() {
+                None => return val,
+                Some(c) => {
+                    if c.is_digit(10) {
+                        val = val * 10 + c.to_digit(10).unwrap() as u8
+                    } else {
+                        return val;
+                    }
+                }
+            }
+            chars.next();
+        }
+    }
 
-    // Vulkan Version 1.0.
-    (vk::Format::R64G64B64_UINT, 64, 64, 64, 0, 0, 0, false, false, RGB, Int),
-    (vk::Format::R64G64B64_SINT, 64, 64, 64, 0, 0, 0, true, false, RGB, Int),
-    (vk::Format::R64G64B64_SFLOAT, 64, 64, 64, 0, 0, 0, true, false, RGB, Float),
+    // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
+    // of lines.
+    #[rustfmt::skip]
+    const INTO_FORMAT_TEST_DATA :&[(
+        vk::SurfaceFormatKHR,
+        Result<Format, FormatConversionError>
+    )]= &[
+        (
+            vk::SurfaceFormatKHR{
+                format: vk::Format::R8_UINT,
+                color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
+            },
+            Ok(Format{
+                image_format: ImageFormat::RegularFormat(RegularImageFormat{
+                    red_channel: 8,
+                    green_channel: 0,
+                    blue_channel: 0,
+                    alpha_channel: 0,
+                    depth_channel: 0,
+                    unused_bits: 0,
+                    signed: false,
+                    packed: false,
+                    order: R,
+                    data_conversion: Int,
+                }),
+                colour_space: ColourSpace::NonLinearSRGB,
+            }
+        )),
+        (
+            vk::SurfaceFormatKHR{
+                format: vk::Format::UNDEFINED,
+                color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
+            },
+            Err(FormatConversionError::ImageFormatError(vk::Format::UNDEFINED)),
+        ),
+        (
+            vk::SurfaceFormatKHR{
+                format: vk::Format::R8_UINT,
+                color_space: vk::ColorSpaceKHR::DOLBYVISION_EXT,
+            },
+            Err(FormatConversionError::ColourSpaceError(vk::ColorSpaceKHR::DOLBYVISION_EXT)),
+        ),
+        (
+            vk::SurfaceFormatKHR{
+                format: vk::Format::UNDEFINED,
+                color_space: vk::ColorSpaceKHR::DOLBYVISION_EXT,
+            },
+            Err(FormatConversionError::ImageFormatError(vk::Format::UNDEFINED)),
+        ),
+        (
+            vk::SurfaceFormatKHR{
+                format: vk::Format::EAC_R11G11_UNORM_BLOCK,
+                color_space: vk::ColorSpaceKHR::SRGB_NONLINEAR,
+            },
+            Err(FormatConversionError::ImageFormatError(vk::Format::EAC_R11G11_UNORM_BLOCK)),
+        ),
+    ];
 
-    // Vulkan Version 1.0.
-    (vk::Format::R64G64B64A64_UINT, 64, 64, 64, 64, 0, 0, false, false, RGBA, Int),
-    (vk::Format::R64G64B64A64_SINT, 64, 64, 64, 64, 0, 0, true, false, RGBA, Int),
-    (vk::Format::R64G64B64A64_SFLOAT, 64, 64, 64, 64, 0, 0, true, false, RGBA, Float),
+    // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
+    // of lines.
+    #[rustfmt::skip]
+    const INTO_IMAGE_FORMAT_TEST_DATA: &[(vk::Format, Result<ImageFormat, ()>)] = &[
+        (
+            vk::Format::R8_UINT,
+            Ok(ImageFormat::RegularFormat(RegularImageFormat{
+                    red_channel: 8,
+                    green_channel: 0,
+                    blue_channel: 0,
+                    alpha_channel: 0,
+                    depth_channel: 0,
+                    unused_bits: 0,
+                    signed: false,
+                    packed: false,
+                    order: R,
+                    data_conversion: Int,
+            })),
+        ),
+        (
+            vk::Format::from_raw(-1),
+            Err(()),
+        ),
+        (
+            vk::Format::UNDEFINED,
+            Err(()),
+        ),
+        (
+            vk::Format::EAC_R11G11_UNORM_BLOCK,
+            Err(()),
+        ),
+    ];
 
-    // Vulkan Version 1.0.
-    (vk::Format::B10G11R11_UFLOAT_PACK32, 11, 11, 10, 0, 0, 0, false, true, BGR, Float),
-
-    // Vulkan Version 1.0.
-    (vk::Format::D16_UNORM, 0, 0, 0, 0, 16, 0, false, false, D, Norm),
-    (vk::Format::X8_D24_UNORM_PACK32, 0, 0, 0, 0, 24, 8, false, true, XD, Norm),
-    (vk::Format::D32_SFLOAT, 0, 0, 0, 0, 32, 0, true, false, D, Float),
-
-    // Vulkan Version 1.1.
-    (vk::Format::R10X6_UNORM_PACK16, 10, 0, 0, 0, 0, 6, false, true, RX, Norm),
-    (vk::Format::R10X6G10X6_UNORM_2PACK16, 10, 10, 0, 0, 0, 12, false, true, RXGX, Norm),
-    (
-        vk::Format::R10X6G10X6B10X6A10X6_UNORM_4PACK16,
-        10, 10, 10, 10, 0, 24,
-        false,
-        true,
-        RXGXBXAX,
-        Norm,
-    ),
-
-    // Vulkan Version 1.1.
-    (vk::Format::R12X4_UNORM_PACK16, 12, 0, 0, 0, 0, 4, false, true, RX, Norm),
-    (vk::Format::R12X4G12X4_UNORM_2PACK16, 12, 12, 0, 0, 0, 8, false, true, RXGX, Norm),
-    (
-        vk::Format::R12X4G12X4B12X4A12X4_UNORM_4PACK16,
-        12, 12, 12, 12, 0, 16,
-        false,
-        true,
-        RXGXBXAX,
-        Norm,
-    ),
-];
+    // rustfmt::skip is used here to avoid cargo fmt from splitting every element over many
+    // lines, causing this code block to become incredibly long.
+    // Data is (flags, identity, rotate 90, rotate 180, rotate 270, mirror, mirror and rotate 90,
+    // mirror and rotate 180, mirror and rotate 270, inherit)
+    #[rustfmt::skip]
+    const INTO_TRANSFORMATION_TEST_DATA: &[(
+        vk::SurfaceTransformFlagsKHR,
+        bool, bool, bool, bool, bool, bool, bool, bool, bool
+    ); 11] = &[
+        (
+            vk::SurfaceTransformFlagsKHR::from_raw(0),
+            false, false, false, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::IDENTITY,
+            true, false, false, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::ROTATE_90,
+            false, true, false, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::ROTATE_180,
+            false, false, true, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::ROTATE_270,
+            false, false, false, true, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR,
+            false, false, false, false, true, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90,
+            false, false, false, false, false, true, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180,
+            false, false, false, false, false, false, true, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270,
+            false, false, false, false, false, false, false, true, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::INHERIT,
+            false, false, false, false, false, false, false, false, true,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::from_raw(0xffffffff),
+            true, true, true, true, true , true, true, true, true,
+        ),
+    ];
+}
