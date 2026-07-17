@@ -4,7 +4,7 @@ mod physical_device_handler;
 mod queue_handler;
 
 use crate::renderer::RendererError;
-use ash::{Device, Instance, khr, vk};
+use ash::{khr, vk, Device, Instance};
 use std::ffi::CStr;
 
 const DEVICE_EXTENSION_NAMES: [&CStr; 1] = [khr::swapchain::NAME];
@@ -59,7 +59,7 @@ mod tests {
     //TODO tests including checking queue_family_indices is set up correctly with good constants
 
     /// Gets a physical device for running tests.
-    pub(super) fn get_physical_device(
+    pub(crate) fn get_physical_device(
         vulkan_instance: &Instance,
         surface_instance: &khr::surface::Instance,
         surface: vk::SurfaceKHR,
@@ -69,7 +69,7 @@ mod tests {
     }
 
     /// Gets a logical device for running tests.
-    pub(super) fn get_logical_device(
+    pub(crate) fn get_logical_device(
         vulkan_instance: &Instance,
         physical_device: vk::PhysicalDevice,
         surface_instance: &khr::surface::Instance,
@@ -82,5 +82,14 @@ mod tests {
             surface,
         )
         .unwrap()
+    }
+
+    /// Gets the device info from a device for running tests
+    pub(crate) fn get_device_display_info(
+        surface_instance: &khr::surface::Instance,
+        device: vk::PhysicalDevice,
+        surface: vk::SurfaceKHR,
+    ) -> device_info_handler::VulkanDisplayInfo {
+        physical_device_handler::get_device_display_info(surface_instance, device, surface).unwrap()
     }
 }

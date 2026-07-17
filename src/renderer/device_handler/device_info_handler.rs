@@ -1,13 +1,13 @@
 //! This module is used for translating information from the ash style information the library
 //! receives into useful information for the library user.
 //! The module also contains structs helpful for setting up the device.
+mod temp;
 
-mod regular_image_format_conversion_data;
-
-use crate::renderer::Size;
-use regular_image_format_conversion_data::REGULAR_IMAGE_FORMAT_CONVERSION_DATA;
-
+use crate::renderer::Size2D;
 use ash::vk;
+
+use crate::renderer::device_info_handler::temp::REGULAR_IMAGE_FORMAT_CONVERSION_DATA;
+
 
 /// A struct holding a potential physical device in a way that is easily usable.
 #[non_exhaustive]
@@ -40,21 +40,36 @@ pub struct DeviceInfo {
     pub presentation_modes: Vec<PresentationMode>,
 }
 
-impl From<VulkanDisplayInfo> for DeviceInfo {
-    fn from(value: VulkanDisplayInfo) -> Self {
-        Self {
-            capabilities: value.capabilities.into(),
+impl TryFrom<&VulkanDisplayInfo> for DeviceInfo {
+    type Error = TryIntoDeviceInfoError;
+
+    fn try_from(value: &VulkanDisplayInfo) -> Result<Self, Self::Error> {
+        Ok(Self {
+            capabilities: value.capabilities.try_into()?,
             available_formats: value
                 .formats
+                .clone()
                 .into_iter()
-                .filter_map(|f| Format::try_from(f).ok())
+                .filter_map(|f| Format::try_from(&f).ok())
                 .collect(),
             presentation_modes: value
                 .presentation_modes
+                .clone()
                 .into_iter()
                 .filter_map(|p| PresentationMode::try_from(p).ok())
                 .collect(),
-        }
+        })
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TryIntoDeviceInfoError {
+    CapabilitiesConversionError(TryIntoCapabilitiesError),
+}
+
+impl From<TryIntoCapabilitiesError> for TryIntoDeviceInfoError {
+    fn from(value: TryIntoCapabilitiesError) -> Self {
+        TryIntoDeviceInfoError::CapabilitiesConversionError(value)
     }
 }
 
@@ -71,9 +86,6 @@ impl From<VulkanDisplayInfo> for DeviceInfo {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LogicalDeviceSettings {
     pub(crate) physical_device: PhysicalDevice,
-    format: vk::SurfaceFormatKHR, // The data format of the images
-    mode: vk::PresentModeKHR,     // The presentation mode of the images
-    size: vk::Extent2D,           // Stores the size of the swapchain images
     pub(crate) num_swap_frames: u8,
 }
 
@@ -102,27 +114,33 @@ impl LogicalDeviceSettings {
 }
 
 /// What capabilities a physical device has.
-#[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Capabilities {
     /// The minimum number of images that can be in the swapchain.
     pub min_swapchain_image_count: u32,
 
     /// The maximum number of images that can be in the swapchain.
-    pub max_swapchain_image_count: u32,
+    /// If the value is None, then there is no limit on the number of images, though there may be
+    /// limits on the amount of memory used by presentable images.
+    pub max_swapchain_image_count: Option<u32>,
 
     /// The current size of the image size to be displayed in pixels.
     /// A None for current_image_size is a special value meaning that the size of the image depends
     /// on the size of the provided swapchain.
-    pub current_image_size: Option<Size>,
+    /// If it exists, this will be greater than or equal to min_swapchain_image_size in x and y
+    pub current_image_size: Option<Size2D>,
 
     /// The minimum size of the swapchain in pixels.
-    pub min_swapchain_size: Size,
+    pub min_swapchain_image_size: Size2D,
 
     /// The maximum size of the swapchain in pixels.
-    pub max_swapchain_size: Size,
+    /// This will be greater than or equal to current_image_size in x and y current_image_size
+    /// exists, and will be greater than or equal to min_swapchain_image_size in x any y.
+    /// This is checked against min_swapchain_image_size before current_image_size.
+    pub max_swapchain_image_size: Size2D,
 
-    /// The maximum number of layers to the image to be rendered to.
+    /// The maximum number of layers of the image to be rendered to.
+    /// This will be at least one
     pub max_number_of_image_layers: u32,
 
     /// The possible transformations that can be applied to the image.
@@ -138,26 +156,67 @@ pub struct Capabilities {
     pub supported_image_usages: ImageUsages,
 }
 
-impl From<vk::SurfaceCapabilitiesKHR> for Capabilities {
-    fn from(value: vk::SurfaceCapabilitiesKHR) -> Self {
-        Self {
+impl TryFrom<vk::SurfaceCapabilitiesKHR> for Capabilities {
+    type Error = TryIntoCapabilitiesError;
+
+    fn try_from(value: vk::SurfaceCapabilitiesKHR) -> Result<Self, Self::Error> {
+        let result = Self {
             min_swapchain_image_count: value.min_image_count,
-            max_swapchain_image_count: value.max_image_count,
+            max_swapchain_image_count: match value.max_image_count {
+                0 => None,
+                val => Some(val),
+            },
             current_image_size: match value.current_extent {
                 vk::Extent2D {
-                    width: 0xFFFFFFFF,
-                    height: 0xFFFFFFFF,
+                    width: 0xffffffff,
+                    height: 0xffffffff,
                 } => None,
                 value => Some(value.into()),
             },
-            min_swapchain_size: value.min_image_extent.into(),
-            max_swapchain_size: value.max_image_extent.into(),
+            min_swapchain_image_size: value.min_image_extent.into(),
+            max_swapchain_image_size: value.max_image_extent.into(),
             max_number_of_image_layers: value.max_image_array_layers,
-            supported_image_transformations: value.supported_transforms.into(),
-            current_image_transformations: value.current_transform.into(),
-            supported_alpha_compositing_modes: value.supported_composite_alpha.into(),
+            supported_image_transformations: match value.supported_transforms.try_into() {
+                Ok(val) => val,
+                Err(()) => {
+                    return Err(TryIntoCapabilitiesError::FailedToConvertSupportedTransformations);
+                }
+            },
+            current_image_transformations: match value.current_transform.try_into() {
+                Ok(val) => val,
+                Err(()) => {
+                    return Err(TryIntoCapabilitiesError::FailedToConvertCurrentTransformations);
+                }
+            },
+            supported_alpha_compositing_modes: match value.supported_composite_alpha.try_into() {
+                Ok(val) => val,
+                Err(()) => return Err(TryIntoCapabilitiesError::FailedToConvertCompositeAlpha),
+            },
             supported_image_usages: value.supported_usage_flags.into(),
+        };
+        if let Some(max) = result.max_swapchain_image_count {
+            if result.min_swapchain_image_count > max {
+                return Err(TryIntoCapabilitiesError::MinSwapchainImageCountGreaterThanMax);
+            }
         }
+        if !result
+            .min_swapchain_image_size
+            .fits_inside(&result.max_swapchain_image_size)
+        {
+            return Err(TryIntoCapabilitiesError::MinSwapchainImageSizeDoesNotFitInMax);
+        }
+        if let Some(val) = result.current_image_size {
+            if !result.min_swapchain_image_size.fits_inside(&val) {
+                return Err(TryIntoCapabilitiesError::MinSwapchainImageSizeDoesNotFitInCurrent);
+            }
+            if !val.fits_inside(&result.max_swapchain_image_size) {
+                return Err(TryIntoCapabilitiesError::CurrentSwapchainImageSizeDoesNotFitInMax);
+            }
+        }
+        if result.max_number_of_image_layers < 1 {
+            return Err(TryIntoCapabilitiesError::MaxNumberOfImageLayersLessThanOne);
+        }
+        Ok(result)
     }
 }
 
@@ -169,10 +228,10 @@ pub struct Format {
     pub colour_space: ColourSpace,
 }
 
-impl TryFrom<vk::SurfaceFormatKHR> for Format {
+impl TryFrom<&vk::SurfaceFormatKHR> for Format {
     type Error = FormatConversionError;
 
-    fn try_from(value: vk::SurfaceFormatKHR) -> Result<Self, Self::Error> {
+    fn try_from(value: &vk::SurfaceFormatKHR) -> Result<Self, Self::Error> {
         Ok(Format {
             image_format: match value.format.try_into() {
                 Ok(fmt) => fmt,
@@ -239,7 +298,22 @@ impl TryFrom<vk::PresentModeKHR> for PresentationMode {
     }
 }
 
+/// Gives the error that occurred when converting vk::SurfaceCapabilities to Capabilities.
+#[non_exhaustive]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TryIntoCapabilitiesError {
+    FailedToConvertSupportedTransformations,
+    FailedToConvertCurrentTransformations,
+    FailedToConvertCompositeAlpha,
+    MinSwapchainImageCountGreaterThanMax,
+    MinSwapchainImageSizeDoesNotFitInMax,
+    MinSwapchainImageSizeDoesNotFitInCurrent,
+    CurrentSwapchainImageSizeDoesNotFitInMax,
+    MaxNumberOfImageLayersLessThanOne,
+}
+
 /// Stores transformations of the image.
+/// At least one option will always be true.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct ImageTransformations {
@@ -272,9 +346,11 @@ pub struct ImageTransformations {
     pub inherit: bool,
 }
 
-impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
-    fn from(value: vk::SurfaceTransformFlagsKHR) -> Self {
-        Self {
+impl TryFrom<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
+    type Error = ();
+
+    fn try_from(value: vk::SurfaceTransformFlagsKHR) -> Result<Self, Self::Error> {
+        let result = Self {
             identity: value.contains(vk::SurfaceTransformFlagsKHR::IDENTITY),
             rotate_90_degrees: value.contains(vk::SurfaceTransformFlagsKHR::ROTATE_90),
             rotate_180_degrees: value.contains(vk::SurfaceTransformFlagsKHR::ROTATE_180),
@@ -287,13 +363,27 @@ impl From<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
             mirror_and_rotate_270_degrees: value
                 .contains(vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270),
             inherit: value.contains(vk::SurfaceTransformFlagsKHR::INHERIT),
+        };
+        if !(result.identity
+            || result.rotate_90_degrees
+            || result.rotate_180_degrees
+            || result.rotate_270_degrees
+            || result.mirror
+            || result.mirror_and_rotate_90_degrees
+            || result.mirror_and_rotate_180_degrees
+            || result.mirror_and_rotate_270_degrees
+            || result.inherit)
+        {
+            return Err(());
         }
+        Ok(result)
     }
 }
 
 /// Stores how the alpha component of the image is determined.
 /// If the image does not have an alpha component, these settings will not do anything (except
 /// potentially inherit depending on the specific system).
+/// At least one option will always be true.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct AlphaCompositingModes {
@@ -313,14 +403,20 @@ pub struct AlphaCompositingModes {
     pub inherit: bool,
 }
 
-impl From<vk::CompositeAlphaFlagsKHR> for AlphaCompositingModes {
-    fn from(value: vk::CompositeAlphaFlagsKHR) -> Self {
-        Self {
+impl TryFrom<vk::CompositeAlphaFlagsKHR> for AlphaCompositingModes {
+    type Error = ();
+
+    fn try_from(value: vk::CompositeAlphaFlagsKHR) -> Result<Self, Self::Error> {
+        let result = Self {
             opaque: value.contains(vk::CompositeAlphaFlagsKHR::OPAQUE),
             pre_multiplied: value.contains(vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED),
             post_multiplied: value.contains(vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED),
             inherit: value.contains(vk::CompositeAlphaFlagsKHR::INHERIT),
+        };
+        if !(result.opaque || result.pre_multiplied || result.post_multiplied || result.inherit) {
+            return Err(());
         }
+        Ok(result)
     }
 }
 
@@ -481,7 +577,7 @@ pub struct RegularImageFormat {
     /// after that to fill the gaps.
     /// For these, if packed is true, then the group of bits with the unused ones at the end form an
     /// unpacked word, and it is these words which are then packed
-    pub packed: bool,
+    pub packed: Option<u8>,
 
     /// Stores the order that the data is packed into the bitstring in.
     pub order: RegularImageFormatOrder,
@@ -493,7 +589,9 @@ pub struct RegularImageFormat {
 impl TryFrom<vk::Format> for RegularImageFormat {
     type Error = ();
 
+    //TODO fix
     fn try_from(value: vk::Format) -> Result<Self, Self::Error> {
+        /*
         for item in REGULAR_IMAGE_FORMAT_CONVERSION_DATA {
             if value == item.0 {
                 return Ok(RegularImageFormat {
@@ -510,6 +608,7 @@ impl TryFrom<vk::Format> for RegularImageFormat {
                 });
             }
         }
+        */
         Err(())
     }
 }
@@ -559,13 +658,90 @@ pub enum RegularImageFormatConversion {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use RegularImageFormatConversion::{Float, Int, Norm, SRGB, Scaled};
+    use crate::renderer::{debugger::tests, device_handler};
+    use RegularImageFormatConversion::{Float, Int, Norm, Scaled, SRGB};
     use RegularImageFormatOrder::{ABGR, ARGB, BGR, BGRA, D, R, RG, RGB, RGBA, RX, RXGX, RXGXBXAX};
+
+    #[test]
+    fn can_get_device_info() {
+        let into_device_info_test_data = &[
+            (
+                VulkanDisplayInfo {
+                    capabilities: INTO_CAPABILITIES_TEST_DATA[0].0,
+                    formats: vec![INTO_FORMAT_TEST_DATA[0].0],
+                    presentation_modes: vec![vk::PresentModeKHR::FIFO],
+                },
+                Ok(DeviceInfo {
+                    capabilities: INTO_CAPABILITIES_TEST_DATA[0].1.clone().unwrap(),
+                    available_formats: vec![INTO_FORMAT_TEST_DATA[0].1.unwrap()],
+                    presentation_modes: vec![PresentationMode::FIFO],
+                }),
+            ),
+            (
+                VulkanDisplayInfo {
+                    capabilities: INTO_CAPABILITIES_TEST_DATA[2].0,
+                    formats: vec![INTO_FORMAT_TEST_DATA[0].0],
+                    presentation_modes: vec![vk::PresentModeKHR::FIFO],
+                },
+                Err(TryIntoDeviceInfoError::CapabilitiesConversionError(
+                    TryIntoCapabilitiesError::MinSwapchainImageCountGreaterThanMax,
+                )),
+            ),
+        ];
+        for test in into_device_info_test_data {
+            assert_eq!(DeviceInfo::try_from(&test.0), test.1)
+        }
+    }
+
+    #[test]
+    fn can_use_getters_and_setters_in_logical_device_settings() {
+        let (_guard, vulkan_entry, mut glfw_instance) = tests::get_entries();
+        let mut vulkan_instance = tests::get_vulkan_instance(&vulkan_entry, &glfw_instance);
+        let surface_instance = tests::get_surface_instance(&vulkan_entry, &vulkan_instance);
+        let window = tests::get_window(&mut glfw_instance);
+        let surface = tests::get_window_surface(&mut vulkan_instance, &window);
+        let device = device_handler::tests::get_physical_device(
+            &vulkan_instance,
+            &surface_instance,
+            surface,
+        );
+        let device_info =
+            device_handler::tests::get_device_display_info(&surface_instance, device, surface);
+        let new_physical_device = PhysicalDevice {
+            device_info: DeviceInfo {
+                capabilities: Capabilities::try_from(device_info.capabilities).unwrap(),
+                available_formats: Vec::new(),
+                presentation_modes: Vec::new(),
+            },
+            device,
+        };
+        let logical_device_settings = LogicalDeviceSettings {
+            physical_device: PhysicalDevice {
+                device_info: DeviceInfo::try_from(&device_info).unwrap(),
+                device,
+            },
+            num_swap_frames: 2,
+        }
+        .with_num_swap_frames(3)
+        .with_physical_device(new_physical_device.clone());
+        assert_eq!(logical_device_settings.get_num_swap_frames(), 3);
+        assert_eq!(
+            logical_device_settings.get_physical_device(),
+            &new_physical_device
+        );
+    }
+
+    #[test]
+    fn can_get_capabilities() {
+        for test in INTO_CAPABILITIES_TEST_DATA {
+            assert_eq!(Capabilities::try_from(test.0), test.1)
+        }
+    }
 
     #[test]
     fn test_try_into_format() {
         for test in INTO_FORMAT_TEST_DATA {
-            assert_eq!(Format::try_from(test.0), test.1)
+            assert_eq!(Format::try_from(&test.0), test.1)
         }
     }
 
@@ -597,20 +773,24 @@ mod tests {
     #[test]
     fn test_into_image_transformations() {
         for test in INTO_TRANSFORMATION_TEST_DATA {
-            assert_eq!(
-                ImageTransformations::from(test.0),
-                ImageTransformations {
-                    identity: test.1,
-                    rotate_90_degrees: test.2,
-                    rotate_180_degrees: test.3,
-                    rotate_270_degrees: test.4,
-                    mirror: test.5,
-                    mirror_and_rotate_90_degrees: test.6,
-                    mirror_and_rotate_180_degrees: test.7,
-                    mirror_and_rotate_270_degrees: test.8,
-                    inherit: test.9,
-                }
-            )
+            if test.1 {
+                assert_eq!(
+                    ImageTransformations::try_from(test.0),
+                    Ok(ImageTransformations {
+                        identity: test.2,
+                        rotate_90_degrees: test.3,
+                        rotate_180_degrees: test.4,
+                        rotate_270_degrees: test.5,
+                        mirror: test.6,
+                        mirror_and_rotate_90_degrees: test.7,
+                        mirror_and_rotate_180_degrees: test.8,
+                        mirror_and_rotate_270_degrees: test.9,
+                        inherit: test.10,
+                    })
+                )
+            } else {
+                assert_eq!(ImageTransformations::try_from(test.0), Err(()))
+            }
         }
     }
 
@@ -620,23 +800,27 @@ mod tests {
         // of lines.
         #[rustfmt::skip]
         let test_data = &[
-            (vk::CompositeAlphaFlagsKHR::from_raw(0), false, false, false, false),
-            (vk::CompositeAlphaFlagsKHR::OPAQUE, true, false, false, false),
-            (vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED, false, true, false, false),
-            (vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED, false, false, true, false),
-            (vk::CompositeAlphaFlagsKHR::INHERIT, false, false, false, true),
-            (vk::CompositeAlphaFlagsKHR::from_raw(0xffffffff), true, true, true, true),
+            (vk::CompositeAlphaFlagsKHR::OPAQUE, true, true, false, false, false),
+            (vk::CompositeAlphaFlagsKHR::PRE_MULTIPLIED, true, false, true, false, false),
+            (vk::CompositeAlphaFlagsKHR::POST_MULTIPLIED, true, false, false, true, false),
+            (vk::CompositeAlphaFlagsKHR::INHERIT, true, false, false, false, true),
+            (vk::CompositeAlphaFlagsKHR::from_raw(0xffffffff), true, true, true, true, true),
+            (vk::CompositeAlphaFlagsKHR::from_raw(0), false, false, false, false, false),
         ];
         for test in test_data {
-            assert_eq!(
-                AlphaCompositingModes::from(test.0),
-                AlphaCompositingModes {
-                    opaque: test.1,
-                    pre_multiplied: test.2,
-                    post_multiplied: test.3,
-                    inherit: test.4,
-                }
-            )
+            if test.1 {
+                assert_eq!(
+                    AlphaCompositingModes::try_from(test.0),
+                    Ok(AlphaCompositingModes {
+                        opaque: test.2,
+                        pre_multiplied: test.3,
+                        post_multiplied: test.4,
+                        inherit: test.5,
+                    })
+                )
+            } else {
+                assert_eq!(AlphaCompositingModes::try_from(test.0), Err(()))
+            }
         }
     }
 
@@ -696,7 +880,7 @@ mod tests {
                 depth_channel: 0,
                 unused_bits: 0,
                 signed: false,
-                packed: true,
+                packed: Some(8),
                 order: RG,
                 data_conversion: Norm,
             })),
@@ -738,28 +922,32 @@ mod tests {
         // packed, order, conversion).
         #[rustfmt::skip]
         let test_data = &[
-            (vk::Format::R8_SNORM, true, 8, 0, 0, 0, 0, 0, true, false, R, Norm),
-            (vk::Format::R5G6B5_UNORM_PACK16, true, 5, 6, 5, 0, 0, 0, false, true, RGB, Norm),
+            (vk::Format::R8_SNORM, true, 8, 0, 0, 0, 0, 0, true, None, R, Norm),
+            (
+                vk::Format::R5G6B5_UNORM_PACK16,
+                true, 5, 6, 5, 0, 0, 0, false, Some(16), RGB, Norm,
+            ),
             (
                 vk::Format::R10X6G10X6B10X6A10X6_UNORM_4PACK16,
-                true, 10, 10, 10, 10, 0, 24, false, true, RXGXBXAX, Norm,
+                true, 10, 10, 10, 10, 0, 24, false, Some(16), RXGXBXAX, Norm,
             ),
-            (vk::Format::D32_SFLOAT, true, 0, 0, 0, 0, 32, 0, true, false, D, Float),
+            (vk::Format::D32_SFLOAT, true, 0, 0, 0, 0, 32, 0, true, None, D, Float),
+            //TODO Fix
+            //(REGULAR_IMAGE_FORMAT_CONVERSION_DATA[0].0,true, 4, 4, 0, 0, 0, 0, false, true, RG, Norm),
+            //(REGULAR_IMAGE_FORMAT_CONVERSION_DATA[last].0,true, 12, 12, 12, 12, 0, 16, false, true, RXGXBXAX, Norm,),
             (
-                REGULAR_IMAGE_FORMAT_CONVERSION_DATA[0].0,
-                true, 4, 4, 0, 0, 0, 0, false, true, RG, Norm
+                vk::Format::R12X4_UNORM_PACK16_KHR,
+                true, 12, 0, 0, 0, 0, 4, false, Some(16), RX, Norm,
             ),
+            (vk::Format::from_raw(-1), false, 0, 0, 0, 0, 0, 0, false, None, R, Int),
+            (vk::Format::UNDEFINED, false, 0, 0, 0, 0, 0, 0, false, None, R, Int),
             (
-                REGULAR_IMAGE_FORMAT_CONVERSION_DATA[last].0,
-                true, 12, 12, 12, 12, 0, 16, false, true, RXGXBXAX, Norm,
+                vk::Format::EAC_R11G11_UNORM_BLOCK,
+                false, 0, 0, 0, 0, 0, 0, false, None, R, Int,
             ),
-            (vk::Format::R12X4_UNORM_PACK16_KHR, true, 12, 0, 0, 0, 0, 4, false, true, RX, Norm),
-            (vk::Format::from_raw(-1), false, 0, 0, 0, 0, 0, 0, false, false, R, Int),
-            (vk::Format::UNDEFINED, false, 0, 0, 0, 0, 0, 0, false, false, R, Int),
-            (vk::Format::EAC_R11G11_UNORM_BLOCK, false, 0, 0, 0, 0, 0, 0, false, false, R, Int),
         ];
         for test in test_data {
-            if test.1 == true {
+            if test.1 {
                 assert_eq!(
                     RegularImageFormat::try_from(test.0),
                     Ok(RegularImageFormat {
@@ -785,7 +973,8 @@ mod tests {
     fn regular_image_format_conversion_data_correct() {
         for format in REGULAR_IMAGE_FORMAT_CONVERSION_DATA {
             let correct = format.0;
-            let correct_data = get_regular_image_format_stats(format!("{correct:?}")).unwrap();
+            let correct_data = get_regular_image_format_stats(format!("{correct:?}").as_str())
+                .unwrap();
             assert_eq!(
                 *format,
                 (
@@ -805,12 +994,13 @@ mod tests {
         }
     }
 
-    // We did not use this for the actual code, as a change to how debug works for vk::Format, which
-    // would be considered a non-breaking change, would break our code.
-    // It is fine here as worst case these tests stops working and get fixed with no impact on
-    // actual prod code.
+    /// We did not use this for the actual code, as a change to how debug works for vk::Format,
+    /// which would be considered a non-breaking change, would break our code.
+    /// It is fine here as worst case these tests stops working and get fixed with no impact on
+    /// actual prod code.
+    /// Will panic if the number of bits in any one channel exceeds the max value of u8.
     fn get_regular_image_format_stats(
-        name: String,
+        name: &str,
     ) -> Option<(
         [u8; 6],
         bool,
@@ -821,7 +1011,7 @@ mod tests {
         let mut words = name.split('_');
 
         let mut channels = [0, 0, 0, 0, 0, 0];
-        let mut first_word = words.next()?.chars().peekable();
+        let mut first_word = words.next().unwrap().chars().peekable();
         let mut format_order_string = String::new();
         loop {
             match first_word.next() {
@@ -900,6 +1090,39 @@ mod tests {
         Some((channels, signed, packed, order, conversion))
     }
 
+    #[test]
+    fn test_get_regular_image_format_stats() {
+        let test_data = &[
+            ("R8_SINT", Some(([8, 0, 0, 0, 0, 0], true, false, R, Int))),
+            (
+                "R1X9G2X9B3X9A4X9_SRGB_PACK32",
+                Some(([1, 2, 3, 4, 0, 36], false, true, RXGXBXAX, SRGB))
+            ),
+            ("D8_SFLOAT", Some(([0, 0, 0, 0, 8, 0], true, false, D,  Float))),
+            ("", None),
+            ("R", None),
+            ("[", None),
+            ("RA", None),
+            ("R_", None),
+            ("_", None),
+            ("R8_HE", None),
+            ("R8_UINT_", None),
+            ("R8_UINT_1", None),
+            ("R8_UINT_PACK8_", None),
+            ("R8_UINT_PACK8_H", None),
+        ];
+        for test in test_data {
+            assert_eq!(get_regular_image_format_stats(test.0), test.1);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to add with overflow")]
+    fn getting_regular_image_statistics_fails_on_256() {
+        get_regular_image_format_stats("R256_SINT");
+    }
+
+    /// Will panic if the number exceeds the max value of u8.
     fn get_number_from_char_iterator(chars: &mut std::iter::Peekable<std::str::Chars>) -> u8 {
         let mut val: u8 = 0;
         loop {
@@ -916,6 +1139,412 @@ mod tests {
             chars.next();
         }
     }
+
+    #[test]
+    fn test_getting_number_from_char_iterator() {
+        let test_data = &[
+            ("", 0, ""),
+            ("_", 0, "_"),
+            ("A", 0, "A"),
+            ("0", 0, ""),
+            ("1", 1, ""),
+            ("1A", 1, "A"),
+            ("A1", 0, "A1"),
+            ("00", 0, ""),
+            ("01", 1, ""),
+            ("10", 10, ""),
+            ("100", 100, ""),
+            ("255", 255, ""),
+            ("255A", 255, "A"),
+            ("25A_5", 25, "A_5"),
+            ("000255A", 255, "A"),
+        ];
+        for test in test_data {
+            let mut iter = test.0.chars().peekable();
+            assert_eq!(get_number_from_char_iterator(&mut iter), test.1);
+            let remaining: String = iter.collect();
+            assert_eq!(remaining, test.2);
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "attempt to add with overflow")]
+    fn getting_number_from_char_iterator_fails_on_256() {
+        get_number_from_char_iterator(&mut "256".chars().peekable());
+    }
+
+    const INTO_CAPABILITIES_TEST_DATA: &[(
+        vk::SurfaceCapabilitiesKHR,
+        Result<Capabilities, TryIntoCapabilitiesError>,
+    )] = &[
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 0xffffffff,
+                    height: 0xffffffff,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Ok(Capabilities {
+                min_swapchain_image_count: 1,
+                max_swapchain_image_count: Some(2),
+                current_image_size: None,
+                min_swapchain_image_size: Size2D { x: 3, y: 4 },
+                max_swapchain_image_size: Size2D { x: 7, y: 8 },
+                max_number_of_image_layers: 9,
+                supported_image_transformations: ImageTransformations {
+                    identity: true,
+                    rotate_90_degrees: false,
+                    rotate_180_degrees: false,
+                    rotate_270_degrees: false,
+                    mirror: false,
+                    mirror_and_rotate_90_degrees: false,
+                    mirror_and_rotate_180_degrees: false,
+                    mirror_and_rotate_270_degrees: false,
+                    inherit: false,
+                },
+                current_image_transformations: ImageTransformations {
+                    identity: false,
+                    rotate_90_degrees: false,
+                    rotate_180_degrees: false,
+                    rotate_270_degrees: false,
+                    mirror: false,
+                    mirror_and_rotate_90_degrees: false,
+                    mirror_and_rotate_180_degrees: false,
+                    mirror_and_rotate_270_degrees: false,
+                    inherit: true,
+                },
+                supported_alpha_compositing_modes: AlphaCompositingModes {
+                    opaque: true,
+                    pre_multiplied: false,
+                    post_multiplied: false,
+                    inherit: false,
+                },
+                supported_image_usages: ImageUsages {},
+            }),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 0,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Ok(Capabilities {
+                min_swapchain_image_count: 1,
+                max_swapchain_image_count: None,
+                current_image_size: Some(Size2D { x: 5, y: 6 }),
+                min_swapchain_image_size: Size2D { x: 3, y: 4 },
+                max_swapchain_image_size: Size2D { x: 7, y: 8 },
+                max_number_of_image_layers: 9,
+                supported_image_transformations: ImageTransformations {
+                    identity: true,
+                    rotate_90_degrees: false,
+                    rotate_180_degrees: false,
+                    rotate_270_degrees: false,
+                    mirror: false,
+                    mirror_and_rotate_90_degrees: false,
+                    mirror_and_rotate_180_degrees: false,
+                    mirror_and_rotate_270_degrees: false,
+                    inherit: false,
+                },
+                current_image_transformations: ImageTransformations {
+                    identity: false,
+                    rotate_90_degrees: false,
+                    rotate_180_degrees: false,
+                    rotate_270_degrees: false,
+                    mirror: false,
+                    mirror_and_rotate_90_degrees: false,
+                    mirror_and_rotate_180_degrees: false,
+                    mirror_and_rotate_270_degrees: false,
+                    inherit: true,
+                },
+                supported_alpha_compositing_modes: AlphaCompositingModes {
+                    opaque: true,
+                    pre_multiplied: false,
+                    post_multiplied: false,
+                    inherit: false,
+                },
+                supported_image_usages: ImageUsages {},
+            }),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 2,
+                max_image_count: 1,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::MinSwapchainImageCountGreaterThanMax),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::MinSwapchainImageSizeDoesNotFitInCurrent),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 3,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::MinSwapchainImageSizeDoesNotFitInMax),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 9,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::CurrentSwapchainImageSizeDoesNotFitInMax),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 0,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::MaxNumberOfImageLayersLessThanOne),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::from_raw(0),
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::FailedToConvertSupportedTransformations),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::from_raw(0),
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::OPAQUE,
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::FailedToConvertCurrentTransformations),
+        ),
+        (
+            vk::SurfaceCapabilitiesKHR {
+                min_image_count: 1,
+                max_image_count: 2,
+                current_extent: vk::Extent2D {
+                    width: 5,
+                    height: 6,
+                },
+                min_image_extent: vk::Extent2D {
+                    width: 3,
+                    height: 4,
+                },
+                max_image_extent: vk::Extent2D {
+                    width: 7,
+                    height: 8,
+                },
+                max_image_array_layers: 9,
+                supported_transforms: vk::SurfaceTransformFlagsKHR::IDENTITY,
+                current_transform: vk::SurfaceTransformFlagsKHR::INHERIT,
+                supported_composite_alpha: vk::CompositeAlphaFlagsKHR::from_raw(0),
+                supported_usage_flags: vk::ImageUsageFlags::from_raw(0xffffffff),
+            },
+            Err(TryIntoCapabilitiesError::FailedToConvertCompositeAlpha),
+        ),
+    ];
+
+    // rustfmt::skip is used here to avoid cargo fmt from splitting every element over many
+    // lines, causing this code block to become incredibly long.
+    // Data is (successful, flags, identity, rotate 90, rotate 180, rotate 270, mirror, mirror and
+    // rotate 90, mirror and rotate 180, mirror and rotate 270, inherit)
+    #[rustfmt::skip]
+    const INTO_TRANSFORMATION_TEST_DATA: &[(
+        vk::SurfaceTransformFlagsKHR,
+        bool, bool, bool, bool, bool, bool, bool, bool, bool, bool
+    ); 11] = &[
+        (
+            vk::SurfaceTransformFlagsKHR::from_raw(0),
+            false, false, false, false, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::IDENTITY,
+            true, true, false, false, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::ROTATE_90,
+            true, false, true, false, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::ROTATE_180,
+            true, false, false, true, false, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::ROTATE_270,
+            true, false, false, false, true, false, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR,
+            true, false, false, false, false, true, false, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90,
+            true, false, false, false, false, false, true, false, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180,
+            true, false, false, false, false, false, false, true, false, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270,
+            true, false, false, false, false, false, false, false, true, false,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::INHERIT,
+            true, false, false, false, false, false, false, false, false, true,
+        ),
+        (
+            vk::SurfaceTransformFlagsKHR::from_raw(0xffffffff),
+            true, true, true, true, true, true , true, true, true, true,
+        ),
+    ];
 
     // We use rustfmt::skip to prevent the formatter from splitting this across a massive amount
     // of lines.
@@ -938,7 +1567,7 @@ mod tests {
                     depth_channel: 0,
                     unused_bits: 0,
                     signed: false,
-                    packed: false,
+                    packed: None,
                     order: R,
                     data_conversion: Int,
                 }),
@@ -989,7 +1618,7 @@ mod tests {
                     depth_channel: 0,
                     unused_bits: 0,
                     signed: false,
-                    packed: false,
+                    packed: None,
                     order: R,
                     data_conversion: Int,
             })),
@@ -1005,61 +1634,6 @@ mod tests {
         (
             vk::Format::EAC_R11G11_UNORM_BLOCK,
             Err(()),
-        ),
-    ];
-
-    // rustfmt::skip is used here to avoid cargo fmt from splitting every element over many
-    // lines, causing this code block to become incredibly long.
-    // Data is (flags, identity, rotate 90, rotate 180, rotate 270, mirror, mirror and rotate 90,
-    // mirror and rotate 180, mirror and rotate 270, inherit)
-    #[rustfmt::skip]
-    const INTO_TRANSFORMATION_TEST_DATA: &[(
-        vk::SurfaceTransformFlagsKHR,
-        bool, bool, bool, bool, bool, bool, bool, bool, bool
-    ); 11] = &[
-        (
-            vk::SurfaceTransformFlagsKHR::from_raw(0),
-            false, false, false, false, false, false, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::IDENTITY,
-            true, false, false, false, false, false, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::ROTATE_90,
-            false, true, false, false, false, false, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::ROTATE_180,
-            false, false, true, false, false, false, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::ROTATE_270,
-            false, false, false, true, false, false, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR,
-            false, false, false, false, true, false, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_90,
-            false, false, false, false, false, true, false, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_180,
-            false, false, false, false, false, false, true, false, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::HORIZONTAL_MIRROR_ROTATE_270,
-            false, false, false, false, false, false, false, true, false,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::INHERIT,
-            false, false, false, false, false, false, false, false, true,
-        ),
-        (
-            vk::SurfaceTransformFlagsKHR::from_raw(0xffffffff),
-            true, true, true, true, true , true, true, true, true,
         ),
     ];
 }

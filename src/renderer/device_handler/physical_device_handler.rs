@@ -158,7 +158,7 @@ fn rank_device(vulkan_instance: &Instance, device: vk::PhysicalDevice) -> i32 {
     }
 }
 
-fn get_device_display_info(
+pub(super) fn get_device_display_info(
     surface_instance: &khr::surface::Instance,
     device: vk::PhysicalDevice,
     surface: vk::SurfaceKHR,

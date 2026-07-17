@@ -5,7 +5,7 @@ mod window_handler;
 
 #[cfg(debug_assertions)]
 use ash::ext;
-use ash::{Device, Entry, Instance, khr, vk};
+use ash::{khr, vk, Device, Entry, Instance};
 use glfw::{self, Glfw};
 use std::ffi::NulError;
 
@@ -150,12 +150,18 @@ impl Drop for Renderer {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct Size {
+pub struct Size2D {
     pub x: u32,
     pub y: u32,
 }
 
-impl From<vk::Extent2D> for Size {
+impl Size2D {
+    fn fits_inside(&self, other: &Self) -> bool {
+        self.x <= other.x && self.y <= other.y
+    }
+}
+
+impl From<vk::Extent2D> for Size2D {
     fn from(value: vk::Extent2D) -> Self {
         Self {
             x: value.width,
