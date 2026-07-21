@@ -659,8 +659,8 @@ pub enum RegularImageFormatConversion {
 mod tests {
     use super::*;
     use crate::renderer::{debugger::tests, device_handler};
-    use RegularImageFormatConversion::{Float, Int, Norm, Scaled, SRGB};
-    use RegularImageFormatOrder::{ABGR, ARGB, BGR, BGRA, D, R, RG, RGB, RGBA, RX, RXGX, RXGXBXAX};
+    use RegularImageFormatConversion::*;
+    use RegularImageFormatOrder::*;
 
     #[test]
     fn can_get_device_info() {
