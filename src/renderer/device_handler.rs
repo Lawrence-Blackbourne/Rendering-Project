@@ -4,7 +4,7 @@ mod physical_device_handler;
 mod queue_handler;
 
 use crate::renderer::RendererError;
-use ash::{khr, vk, Device, Instance};
+use ash::{Device, Instance, khr, vk};
 use std::ffi::CStr;
 
 const DEVICE_EXTENSION_NAMES: [&CStr; 1] = [khr::swapchain::NAME];

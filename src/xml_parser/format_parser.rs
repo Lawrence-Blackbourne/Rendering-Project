@@ -4,6 +4,4 @@ pub(super) enum FormatXMLElement {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub(super) enum ParsedRegularFormat {
-    
-}
+pub(super) enum ParsedRegularFormat {}

@@ -5,7 +5,7 @@ mod window_handler;
 
 #[cfg(debug_assertions)]
 use ash::ext;
-use ash::{khr, vk, Device, Entry, Instance};
+use ash::{Device, Entry, Instance, khr, vk};
 use glfw::{self, Glfw};
 use std::ffi::NulError;
 

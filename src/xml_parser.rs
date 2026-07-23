@@ -3,30 +3,45 @@
 //! It also cannot handle & codes, treating them as text.
 
 mod format_parser;
-mod tokenizer;
 mod parser;
+mod tokenizer;
 
-use std::{fs,
-          path::Path};
 use parser::{ParsedXml, ParserError};
+use std::{ path::Path};
 
-fn get_parsed_xml() -> () {
-    let xml_path = Path::new("vulkan_XML/vk.xml");
-    let xml = String::from_utf8(fs::read(xml_path).unwrap()).unwrap();
+fn get_parsed_xml(path: &Path) -> Result<ParsedXml, ParserError> {
+    let tokenised_xml = tokenizer::tokenize_xml(path)?;
 
-    let tokenised_xml = tokenizer::tokenize_xml(xml.as_str());
-
-    parser::parse_xml(tokenised_xml);
+    parser::parse_xml(tokenised_xml)
 }
 
-
+pub fn temp() {
+    let mut xml = get_parsed_xml(&Path::new("vulkan_XML/vk.xml")).unwrap();
+    assert_ne!(xml.next().unwrap().unwrap(), parser::Item::EndFile);
+    loop {
+        match xml.next().unwrap().unwrap() {
+            parser::Item::EndFile => break,
+            _ => (),
+        }
+    }
+    assert!(xml.next().is_none())
+}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use parser::Item;
 
     #[test]
     fn can_parse_xml() {
-        get_parsed_xml();
+        let mut xml = get_parsed_xml(&Path::new("vulkan_XML/vk.xml")).unwrap();
+        assert_ne!(xml.next().unwrap().unwrap(), Item::EndFile);
+        loop {
+            match xml.next().unwrap().unwrap() {
+                Item::EndFile => break,
+                _ => (),
+            }
+        }
+        assert!(xml.next().is_none())
     }
 }

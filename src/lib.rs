@@ -1,6 +1,6 @@
 pub mod renderer;
 mod string_handler;
-mod xml_parser;
+pub mod xml_parser;
 
 pub fn get_renderer(
     _name: &str,

@@ -8,7 +8,6 @@ use ash::vk;
 
 use crate::renderer::device_info_handler::temp::REGULAR_IMAGE_FORMAT_CONVERSION_DATA;
 
-
 /// A struct holding a potential physical device in a way that is easily usable.
 #[non_exhaustive]
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -973,8 +972,8 @@ mod tests {
     fn regular_image_format_conversion_data_correct() {
         for format in REGULAR_IMAGE_FORMAT_CONVERSION_DATA {
             let correct = format.0;
-            let correct_data = get_regular_image_format_stats(format!("{correct:?}").as_str())
-                .unwrap();
+            let correct_data =
+                get_regular_image_format_stats(format!("{correct:?}").as_str()).unwrap();
             assert_eq!(
                 *format,
                 (
@@ -1096,9 +1095,12 @@ mod tests {
             ("R8_SINT", Some(([8, 0, 0, 0, 0, 0], true, false, R, Int))),
             (
                 "R1X9G2X9B3X9A4X9_SRGB_PACK32",
-                Some(([1, 2, 3, 4, 0, 36], false, true, RXGXBXAX, SRGB))
+                Some(([1, 2, 3, 4, 0, 36], false, true, RXGXBXAX, SRGB)),
             ),
-            ("D8_SFLOAT", Some(([0, 0, 0, 0, 8, 0], true, false, D,  Float))),
+            (
+                "D8_SFLOAT",
+                Some(([0, 0, 0, 0, 8, 0], true, false, D, Float)),
+            ),
             ("", None),
             ("R", None),
             ("[", None),

@@ -1,6 +1,4 @@
-use std::{env,
-          fs,
-          path::Path};
+use std::{env, fs, path::Path};
 
 fn main() {
     generate_regular_image_format_conversion_data()
