@@ -50,9 +50,23 @@ impl ParsedXml {
             }
         }
     }
-}
 
-impl ParsedXml {
+    pub(super) fn skip_current_element(&mut self) -> Option<Result<(), ParserError>> {
+        let mut current_depth = 1;
+        loop {
+            match self.next()? {
+                Ok(Item::Element(_)) => current_depth += 1,
+                Ok(Item::EndCurrentElement) => current_depth -= 1,
+                Ok(_) => (),
+                Err(e) => return Some(Err(e)),
+            }
+            if current_depth == 0 {
+                break
+            }
+        }
+        Some(Ok(()))
+    }
+
     fn get_next_element(&mut self) -> Result<Item, ParserError> {
         if self.next.is_some() {
             let value = self.next.clone().unwrap();
