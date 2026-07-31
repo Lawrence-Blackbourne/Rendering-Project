@@ -6,3 +6,15 @@ edition = "2024"
 [dependencies]
 ash = { version = "0.38.0", features = ["linked"]}
 glfw = "0.62.0"
+criterion = { version = "0.8.2", optional = true }
+
+[features]
+bench = ["dep:criterion"]
+
+[profile.bench]
+debug = true
+
+[[bench]]
+name = "xml_parser"
+harness = false
+required-features = ["bench"]

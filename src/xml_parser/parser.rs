@@ -1,26 +1,27 @@
-use super::tokenizer::{
+use super::ParserError;
+use super::tokeniser::{
     Token::{self, *},
     TokenisedXml,
 };
-use std::io;
+use std::io::{self, Read};
 
-pub(super) fn parse_xml(xml: TokenisedXml) -> Result<ParsedXml, ParserError> {
+pub(super) fn parse_xml<T: Read>(xml: TokenisedXml<T>) -> Result<ParsedXml<T>, ParserError> {
     ParsedXml::try_from(xml)
 }
 
 #[derive(Debug)]
-pub(super) struct ParsedXml {
-    pub tokens: TokenisedXml,
+pub(super) struct ParsedXml<T: Read> {
+    pub tokens: TokenisedXml<T>,
     names: Vec<String>,
     root_found: bool,
     next: Option<Item>,
     done: bool,
 }
 
-impl<'a> TryFrom<TokenisedXml> for ParsedXml {
+impl<'a, T: Read> TryFrom<TokenisedXml<T>> for ParsedXml<T> {
     type Error = ParserError;
 
-    fn try_from(mut tokens: TokenisedXml) -> Result<Self, Self::Error> {
+    fn try_from(mut tokens: TokenisedXml<T>) -> Result<Self, Self::Error> {
         Self::handle_xml_intro(&mut tokens)?;
 
         Ok(ParsedXml {
@@ -33,16 +34,16 @@ impl<'a> TryFrom<TokenisedXml> for ParsedXml {
     }
 }
 
-impl ParsedXml {
+impl<T: Read> ParsedXml<T> {
     pub(super) fn next(&mut self) -> Option<Result<Item, ParserError>> {
         if self.done {
-            return None
+            return None;
         }
         match self.get_next_element() {
             Ok(Item::EndFile) => {
                 self.done = true;
                 Some(Ok(Item::EndFile))
-            },
+            }
             Ok(v) => Some(Ok(v)),
             Err(e) => {
                 self.done = true;
@@ -61,7 +62,7 @@ impl ParsedXml {
                 Err(e) => return Some(Err(e)),
             }
             if current_depth == 0 {
-                break
+                break;
             }
         }
         Some(Ok(()))
@@ -78,12 +79,10 @@ impl ParsedXml {
             Some(StartTag) => {
                 let (name, start) = match self.tokens.next().transpose()? {
                     Some(Word(name)) => (name, true),
-                    Some(Slash) => {
-                        match self.tokens.next().transpose()? {
-                            Some(Word(name)) => (name, false),
-                            Some(token) => return Err(ParserError::InvalidToken(token)),
-                            None => return Err(ParserError::FileCutShortAbruptlyDuringTag),
-                        }
+                    Some(Slash) => match self.tokens.next().transpose()? {
+                        Some(Word(name)) => (name, false),
+                        Some(token) => return Err(ParserError::InvalidToken(token)),
+                        None => return Err(ParserError::FileCutShortAbruptlyDuringTag),
                     },
                     Some(token) => return Err(ParserError::InvalidToken(token)),
                     None => return Err(ParserError::FileCutShortAbruptlyDuringTag),
@@ -108,11 +107,20 @@ impl ParsedXml {
                         Some(token) => Err(ParserError::InvalidToken(token)),
                         None => Err(ParserError::FileCutShortAbruptlyDuringTag),
                     }
-                } else if Some(name) == self.names.pop() {
-                    self.expect_token(EndTag, ParserError::FileCutShortAbruptlyDuringTag)?;
-                    Ok(Item::EndCurrentElement)
                 } else {
-                    Err(ParserError::ElementClosedIncorrectly)
+                    match self.names.pop() {
+                        Some(correct) if correct == name => {
+                            self.expect_token(EndTag, ParserError::FileCutShortAbruptlyDuringTag)?;
+                            Ok(Item::EndCurrentElement)
+                        },
+                        Some(correct) =>
+                            Err(ParserError::ElementsClosedOutOfOrder{
+                                found: name,
+                                correct,
+                            }),
+                        None =>
+                            Err(ParserError::ElementClosedAfterRootElementClosed(name)),
+                    }
                 }
             }
             Some(Word(str)) => self.get_text(str.as_str()),
@@ -129,9 +137,9 @@ impl ParsedXml {
         let mut result = Vec::new();
         loop {
             self.remove_leading_whitespace()?;
-            match self.tokens.peek().transpose()? {
-                Some(Word(key)) => {
-                    self.tokens.next();
+            match self.tokens.peek() {
+                Some(Ok(Word(_))) => {
+                    let Word(key) = self.tokens.next().unwrap()? else { unreachable!() };
                     self.expect_token(Equals, ParserError::FileCutShortAbruptlyDuringTag)?;
                     self.expect_token(QuotationMark, ParserError::FileCutShortAbruptlyDuringTag)?;
                     let mut value = String::new();
@@ -139,7 +147,7 @@ impl ParsedXml {
                         match self.tokens.next().transpose()? {
                             Some(Word(word)) => value += &word,
                             Some(Whitespace(char)) => value.push(char),
-                            Some(Slash) => value.push('\\'),
+                            Some(Slash) => value.push('/'),
                             Some(QuestionMark) => value.push('?'),
                             Some(Equals) => value.push('='),
                             Some(QuotationMark) => break,
@@ -149,7 +157,8 @@ impl ParsedXml {
                     }
                     result.push((key, value));
                 }
-                Some(_) => return Ok(result),
+                Some(Ok(_)) => return Ok(result),
+                Some(Err(_)) => return Err(self.tokens.next().unwrap().unwrap_err()),
                 None => return Err(ParserError::FileCutShortAbruptlyDuringTag),
             }
         }
@@ -158,14 +167,15 @@ impl ParsedXml {
     fn get_text(&mut self, current: &str) -> Result<Item, ParserError> {
         let mut result = String::from(current);
         loop {
-            match self.tokens.peek().transpose()? {
-                Some(Whitespace(char)) => result.push(char),
-                Some(Word(word)) => result += &word,
-                Some(QuotationMark) => result.push('"'),
-                Some(Slash) => result.push('/'),
-                Some(QuestionMark) => result.push('?'),
-                Some(Equals) => result.push('='),
-                Some(_) => break,
+            match self.tokens.peek() {
+                Some(Ok(Whitespace(char))) => result.push(*char),
+                Some(Ok(Word(word))) => result += &word,
+                Some(Ok(QuotationMark)) => result.push('"'),
+                Some(Ok(Slash)) => result.push('/'),
+                Some(Ok(QuestionMark)) => result.push('?'),
+                Some(Ok(Equals)) => result.push('='),
+                Some(Ok(_)) => break,
+                Some(Err(_)) => return Err(self.tokens.next().unwrap().unwrap_err()),
                 None => return self.handle_ending(),
             }
             self.tokens.next();
@@ -173,15 +183,16 @@ impl ParsedXml {
         Ok(Item::Text(result))
     }
 
-    fn handle_xml_intro(tokens: &mut TokenisedXml) -> Result<(), ParserError> {
+    fn handle_xml_intro(tokens: &mut TokenisedXml<T>) -> Result<(), ParserError> {
         Self::remove_leading_whitespace_from_tokens(tokens)?;
-        match tokens.peek().transpose()? {
-            Some(StartTag) => (),
-            Some(token) => return Err(ParserError::InvalidToken(token)),
+        match tokens.peek() {
+            Some(Ok(StartTag)) => (),
+            Some(Ok(token)) => return Err(ParserError::InvalidToken(token.clone())),
+            Some(Err(e)) => return Err(tokens.next().unwrap().unwrap_err()),
             None => return Err(ParserError::NoRootElement),
         }
-        match tokens.peek_i(1).transpose()? {
-            Some(QuestionMark) => {
+        match tokens.peek_n(1) {
+            Some(Ok(QuestionMark)) => {
                 tokens.next();
                 tokens.next();
                 loop {
@@ -200,8 +211,12 @@ impl ParsedXml {
                     None => Err(ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
                 }
             }
-            Some(Word(_)) => Ok(()),
-            Some(token) => Err(ParserError::InvalidToken(token)),
+            Some(Ok(Word(_))) => Ok(()),
+            Some(Ok(token)) => Err(ParserError::InvalidToken(token.clone())),
+            Some(Err(_)) => {
+                let _ = tokens.next();
+                Err(tokens.next().unwrap().unwrap_err())
+            },
             None => Err(ParserError::FileCutShortAbruptlyDuringTag),
         }
     }
@@ -210,11 +225,14 @@ impl ParsedXml {
         Self::remove_leading_whitespace_from_tokens(&mut self.tokens)
     }
 
-    fn remove_leading_whitespace_from_tokens(tokens: &mut TokenisedXml) -> Result<(), ParserError> {
+    fn remove_leading_whitespace_from_tokens(
+        tokens: &mut TokenisedXml<T>,
+    ) -> Result<(), ParserError> {
         loop {
-            match tokens.peek().transpose()? {
-                Some(Whitespace(_)) => (),
-                Some(_) => break,
+            match tokens.peek() {
+                Some(Ok(Whitespace(_))) => (),
+                Some(Ok(_)) => break,
+                Some(Err(_)) => return Err(tokens.next().unwrap().unwrap_err()),
                 None => break,
             }
             tokens.next();
@@ -257,22 +275,4 @@ pub(super) enum Item {
 pub(super) struct Element {
     name: String,
     attributes: Vec<(String, String)>,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum ParserError {
-    FileCutShortAbruptlyDuringXMLDeclaration,
-    FileCutShortAbruptlyDuringTag,
-    NoRootElement,
-    MultipleRootElements,
-    ElementNotClosed,
-    ElementClosedIncorrectly,
-    InvalidToken(Token),
-    FileReadError(io::ErrorKind),
-}
-
-impl From<io::Error> for ParserError {
-    fn from(value: io::Error) -> Self {
-        ParserError::FileReadError(value.kind())
-    }
 }

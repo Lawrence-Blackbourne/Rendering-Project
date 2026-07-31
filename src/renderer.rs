@@ -236,6 +236,9 @@ pub enum RendererError {
     GlfwCallFailed(String),
 }
 
+//TODO implement Display and Error
+//TODO clean up this list of errors.
+
 impl From<vk::Result> for RendererError {
     fn from(error: vk::Result) -> Self {
         match error {

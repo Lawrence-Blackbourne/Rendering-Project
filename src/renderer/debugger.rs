@@ -140,6 +140,7 @@ pub(crate) mod tests {
     use std::sync::{Mutex, MutexGuard};
 
     #[test]
+    #[cfg(debug_assertions)]
     fn can_get_debug_messenger() {
         let (_guard, vulkan_entry, glfw_instance) = get_entries();
         let vulkan_instance = get_vulkan_instance(&vulkan_entry, &glfw_instance);
