@@ -1,28 +1,47 @@
+//! The tokeniser that turns the text file into a stream of tokens.
+//!
+//! A note on performance - using Word(String) is inefficient, causing many heap allocations.
+//! However, this parser is benchmarked at parsing the entirety of vk.xml in sub 30ms.
+//! This is plenty performant for the use case (literally just the build script).
+
 use super::ParserError;
 use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
+use std::iter::FusedIterator;
 use std::path::Path;
 
 pub(super) fn tokenise_xml_file(file_path: &Path) -> Result<TokenisedXml<File>, ParserError> {
     Ok(TokenisedXml::from(File::open(file_path)?))
 }
 
+/// The functions of the tokeniser that this creates use blocking functions for reading in the data.
+/// The data is read in using lines, so an attacker could stream in data with no newlines and no EOF
+/// to hang the tokeniser.
+/// This is obviously fine for this use case, as we are reading in a file already stored on the
+/// computer, and this code is in no way related to security anyway.
 #[derive(Debug)]
 pub(super) struct TokenisedXml<T: Read> {
+
+    // The source of text that the buffer reads from
     text: BufReader<T>,
+
+    // Stores the next tokens to allow for peeking.
     next: VecDeque<Result<Token, ParserError>>,
+
+    // Stores if we have reached the end of the tokens.
     finished: bool,
-    // The current section of the file we are working from
+
+    // The current section of text we are working from.
     buffer: String,
-    // How far into the buffer we are currently looking
+
+    // How far into the buffer we are currently looking.
     byte_offset: usize,
 }
 
-impl<T: Read> From<T> for TokenisedXml<T> {
-
+impl<T: Read> TokenisedXml<T> {
     /// Creates a new instance of the tokeniser from the provided text.
-    fn from(text: T) -> Self {
+    fn new(text: T) -> Self {
         let text = BufReader::new(text);
         Self {
             text,
@@ -34,11 +53,20 @@ impl<T: Read> From<T> for TokenisedXml<T> {
     }
 }
 
+impl<T: Read> From<T> for TokenisedXml<T> {
+
+    /// A wrapper around new()
+    fn from(text: T) -> Self {
+        Self::new(text)
+    }
+}
+
 impl<T: Read> Iterator for TokenisedXml<T> {
+
     type Item = Result<Token, ParserError>;
 
     /// Returns the next token available, returning None if we have reached the end of the stream or
-    /// Some(Err(e)) if we have run into some error.
+    /// `Some(Err(e))` if we have run into some error.
     fn next(&mut self) -> Option<Self::Item> {
         if self.next.is_empty() {
             self.add_token_to_queue()
@@ -47,23 +75,18 @@ impl<T: Read> Iterator for TokenisedXml<T> {
     }
 }
 
+impl<T: Read> FusedIterator for TokenisedXml<T> {}
+
 impl<T: Read> TokenisedXml<T> {
     pub(super) fn peek(&mut self) -> Option<&Result<Token, ParserError>> {
-        if self.next.is_empty() {
-            self.add_token_to_queue();
-        }
-        self.next.get(0)
+        self.peek_n(0)
     }
 
     /// Returns the ith token without consuming any.
     /// Indexing starts at 0, meaning that `peek_n(0)` will return the same value as `peek()`.
     pub(super) fn peek_n(&mut self, n: usize) -> Option<&Result<Token, ParserError>> {
-        if self.next.len() <= n {
-            let mut remaining = n + 1 - self.next.len();
-            while remaining > 0 && !self.finished {
-                self.add_token_to_queue();
-                remaining -= 1;
-            }
+        while self.next.len() <= n && !self.finished {
+            self.add_token_to_queue();
         }
         self.next.get(n)
     }
@@ -82,60 +105,45 @@ impl<T: Read> TokenisedXml<T> {
     }
 
     /// Returns the next token in the sequence.
-    /// The behaviour after an `Ok(Err(e))` or `None` result is returned is undefined.
-    /// For this reason, this should be only used through add_token_to_queue
+    /// The behaviour after a `Some(Err(e))` or `None` result is returned is undefined.
+    /// For this reason, this should be only used through add_token_to_queue.
     fn get_next_token(&mut self) -> Option<Result<Token, ParserError>> {
+        // This function cannot handle tokens that span across `\n` characters, but no token can do
+        // that so this is fine.
         match self.update_line() {
             Ok(true) => (),
             Ok(false) => return None,
             Err(e) => return Some(Err(e.into())),
         }
-        match self.pop_char().unwrap() {
-            '<' => Some(Ok(Token::StartTag)),
-            '>' => Some(Ok(Token::EndTag)),
-            '=' => Some(Ok(Token::Equals)),
-            '"' => Some(Ok(Token::QuotationMark)),
-            '?' => Some(Ok(Token::QuestionMark)),
-            '/' => Some(Ok(Token::Slash)),
-            char if char.is_whitespace() => Some(Ok(Token::Whitespace(char))),
-            char => Some(Ok(Token::Word(self.pop_word(char))))
-        }
-    }
 
-    /// Pops off the next char in the buffer.
-    /// Will only pop a char if the buffer has chars remaining.
-    fn pop_char(&mut self) -> Option<char> {
-        if self.has_data_in_buffer() {
-            let result = self.buffer[self.byte_offset..].chars().next().unwrap();
-            self.byte_offset += result.len_utf8();
-            Some(result)
-        } else {
-            None
-        }
-    }
-
-    /// Gets the next word from the buffer.
-    /// Will exit at the end of the buffer, as no word can cross multiple lines
-    fn pop_word(&mut self, first_char: char) -> String {
-        let mut word_length = 0;
-        loop {
-            match self.buffer[self.byte_offset + word_length..].chars().next() {
-                Some('<' | '>' | '=' | '"' | '?' | '/') => break,
-                Some(char) if char.is_whitespace() => break,
-                Some(char) => word_length += char.len_utf8(),
-                None => break,
-            }
-        }
-        let result = String::from(
-            &self.buffer[self.byte_offset - first_char.len_utf8()..self.byte_offset + word_length]
-        );
-        self.byte_offset += word_length;
-        result
-    }
-
-    /// Returns if there is data available in the buffer.
-    fn has_data_in_buffer(&self) -> bool {
-        self.byte_offset < self.buffer.len()
+        // The following unwrap is safe because we ran self.update_line above, and we only continue
+        // to this point if we got Ok(true).
+        let mut chars = self.buffer[self.byte_offset..].chars();
+        let (byte_length, token) = match chars.next().unwrap() {
+            '<' => (1, Some(Ok(Token::StartTag))),
+            '>' => (1, Some(Ok(Token::EndTag))),
+            '=' => (1, Some(Ok(Token::Equals))),
+            '"' => (1, Some(Ok(Token::QuotationMark))),
+            '?' => (1, Some(Ok(Token::QuestionMark))),
+            '/' => (1, Some(Ok(Token::Slash))),
+            char if char.is_whitespace() => (char.len_utf8(), Some(Ok(Token::Whitespace(char)))),
+            char => {
+                let mut word_length = char.len_utf8();
+                loop {
+                    match chars.next() {
+                        Some('<' | '>' | '=' | '"' | '?' | '/') => break,
+                        Some(char) if char.is_whitespace() => break,
+                        Some(char) => word_length += char.len_utf8(),
+                        None => break,
+                    }
+                }
+                (word_length, Some(Ok(Token::Word(String::from(
+                    &self.buffer[self.byte_offset..self.byte_offset + word_length]
+                )))))
+            },
+        };
+        self.byte_offset += byte_length;
+        token
     }
 
     /// A value of `Ok(true)` means that there is definitely at least one character to read.
@@ -230,8 +238,8 @@ mod tests {
         for test in test_data {
             let mut xml = TokenisedXml::from(TestReader::from(test.0));
             assert_eq!(xml.next().unwrap().unwrap(), test.1);
-            assert_eq!(xml.next().is_none(), true);
-            assert_eq!(xml.next().is_none(), true);
+            assert!(xml.next().is_none());
+            assert!(xml.next().is_none());
         }
     }
 
@@ -271,7 +279,7 @@ mod tests {
                 xml.next().unwrap().unwrap_err().to_string(),
                 PARSER_ERROR_TEST_STRING
             );
-            assert_eq!(xml.next().is_none(), true);
+            assert!(xml.next().is_none());
         }
     }
 
@@ -295,7 +303,7 @@ mod tests {
                 result.get(i).unwrap().clone()
             );
         }
-        assert_eq!(xml.peek_n(result.len() + 1).is_none(), true);
+        assert!(xml.peek_n(result.len() + 1).is_none());
         assert_eq!(
             xml.peek_n(result.len()).unwrap().as_ref().unwrap_err().to_string(),
             PARSER_ERROR_TEST_STRING
@@ -305,7 +313,7 @@ mod tests {
             assert_eq!(xml.next().unwrap().unwrap(), test);
         }
         assert_eq!(xml.next().unwrap().unwrap_err().to_string(), PARSER_ERROR_TEST_STRING);
-        assert_eq!(xml.next().is_none(), true);
+        assert!(xml.next().is_none());
     }
 
     #[test]

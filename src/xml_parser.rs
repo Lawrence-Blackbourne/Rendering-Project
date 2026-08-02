@@ -6,16 +6,6 @@
 //! sections I care about right now.
 //! It also cannot handle CDATA or using single quotes to encode text, as these are also not used in
 //! vk.xml.
-//!
-//! It is worth noting that this code IS somewhat optimized.
-//! Practically, this is completely pointless - his code is only used by the build script, and so
-//! spending multiple days re-writing a tokeniser to go from taking ~100ms to tokenise vk.xml to
-//! currently 32ms is silly.
-//! However, this whole project is a learning tool for me, and so taking on the task of optimizing
-//! this code is purely for educational purposes.
-//! Having said that, the code is not highly optimized at all - again, learning experience and so
-//! there are almost certainly efficiency issues.
-//! The main focus of the optimizations has been dealing with unnecessary string allocations.
 
 mod format_parser;
 mod parser;
@@ -115,7 +105,7 @@ impl std::fmt::Display for ParserError {
             ParserError::MultipleRootElements =>
                 write!(f, "file contains multiple root elements"),
             ParserError::ElementNotClosed =>
-                write!(f, "wn element was not closed"),
+                write!(f, "an element was not closed"),
             ParserError::ElementsClosedOutOfOrder{found, correct} =>
                 write!(
                     f,
