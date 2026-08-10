@@ -1,9 +1,11 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use rendering_project::xml_parser;
 
 #[cfg(feature = "bench")]
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("tokenising vk.xml", |b| b.iter(|| xml_parser::benchmark_tokeniser()));
+    c.bench_function("tokenising vk.xml", |b| {
+        b.iter(|| xml_parser::benchmark_tokeniser())
+    });
 }
 
 #[cfg(feature = "bench")]
