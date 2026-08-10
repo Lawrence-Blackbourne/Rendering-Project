@@ -6,6 +6,8 @@
 //! sections I care about right now.
 //! It also cannot handle CDATA or using single quotes to encode text, as these are also not used in
 //! vk.xml.
+//! It also ignores the contents of the <? ?> block if it is present.
+//! There is no check made that duplicate attributes are not present.
 
 mod format_parser;
 mod parser;
@@ -19,9 +21,7 @@ use std::path::Path;
 const VULKAN_XML_PATH: &str = "vulkan_XML/vk.xml";
 
 fn get_parsed_xml_file(path: &Path) -> Result<ParsedXml<File>, ParserError> {
-    let tokenised_xml = tokeniser::tokenise_xml_file(path)?;
-
-    parser::parse_xml(tokenised_xml)
+    parser::parse_xml_file(path)
 }
 
 /// This function is only here to stop the many many compiler warnings about the code being unused
@@ -38,50 +38,15 @@ pub fn temp() {
     assert!(xml.next().is_none())
 }
 
-#[cfg(feature = "bench")]
-pub fn benchmark_tokeniser() {
-    let mut tokens = tokeniser::tokenise_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
-    loop {
-        let token = tokens.next();
-        match token {
-            None => break,
-            Some(_) => (),
-        }
-    }
-    assert!(tokens.next().is_none())
-}
-
-#[cfg(test)]
-pub mod tests {
-    use super::*;
-    use parser::Item;
-
-    #[test]
-    fn can_parse_xml() {
-        let mut xml = get_parsed_xml_file(&Path::new("vulkan_XML/vk.xml")).unwrap();
-        assert_ne!(xml.next().unwrap().unwrap(), Item::EndFile);
-        loop {
-            match xml.next().unwrap().unwrap() {
-                Item::EndFile => break,
-                _ => (),
-            }
-        }
-        assert!(xml.next().is_none())
-    }
-}
-
 /// Describes what error occurred during the XML parsing
 #[derive(Debug)]
-pub(crate) enum ParserError {
+enum ParserError {
     FileCutShortAbruptlyDuringXMLDeclaration,
     FileCutShortAbruptlyDuringTag,
     NoRootElement,
     MultipleRootElements,
     ElementNotClosed,
-    ElementsClosedOutOfOrder {
-        correct: String,
-        found: String,
-    },
+    ElementsClosedOutOfOrder { correct: String, found: String },
     ElementClosedAfterRootElementClosed(String),
     InvalidToken(tokeniser::Token),
     IoError(io::Error),
@@ -96,27 +61,26 @@ impl From<io::Error> for ParserError {
 impl std::fmt::Display for ParserError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ParserError::FileCutShortAbruptlyDuringXMLDeclaration =>
-                write!(f, "file cut short during the XML declaration"),
-            ParserError::FileCutShortAbruptlyDuringTag =>
-                write!(f, "file cut short during a tag"),
-            ParserError::NoRootElement =>
-                write!(f, "file does not contain a root element"),
-            ParserError::MultipleRootElements =>
-                write!(f, "file contains multiple root elements"),
-            ParserError::ElementNotClosed =>
-                write!(f, "an element was not closed"),
-            ParserError::ElementsClosedOutOfOrder{found, correct} =>
-                write!(
-                    f,
-                    "closure for element {found} found when closure for element {correct} expected"
-                ),
-            ParserError::ElementClosedAfterRootElementClosed(e) =>
-                write!(f, "closure for element {e} found after closure for root element found"),
-            ParserError::InvalidToken(t) =>
-                write!(f, "an invalid {t} token was found where it should not have been"),
-            ParserError::IoError(e) =>
-                write!(f, "an io error occurred: \"{e}\"")
+            ParserError::FileCutShortAbruptlyDuringXMLDeclaration => {
+                write!(f, "file cut short during the XML declaration")
+            }
+            ParserError::FileCutShortAbruptlyDuringTag => write!(f, "file cut short during a tag"),
+            ParserError::NoRootElement => write!(f, "file does not contain a root element"),
+            ParserError::MultipleRootElements => write!(f, "file contains multiple root elements"),
+            ParserError::ElementNotClosed => write!(f, "an element was not closed"),
+            ParserError::ElementsClosedOutOfOrder { found, correct } => write!(
+                f,
+                "closure for element {found} found when closure for element {correct} expected"
+            ),
+            ParserError::ElementClosedAfterRootElementClosed(e) => write!(
+                f,
+                "closure for element {e} found after closure for root element found"
+            ),
+            ParserError::InvalidToken(t) => write!(
+                f,
+                "an invalid \"{t}\" token was found where it should not have been"
+            ),
+            ParserError::IoError(e) => write!(f, "an io error occurred: \"{e}\""),
         }
     }
 }
@@ -133,6 +97,74 @@ impl std::error::Error for ParserError {
             ParserError::ElementClosedAfterRootElementClosed(_) => None,
             ParserError::InvalidToken(_) => None,
             ParserError::IoError(e) => e.source(),
+        }
+    }
+}
+
+#[cfg(feature = "bench")]
+pub fn benchmark_tokeniser() {
+    let mut tokens = tokeniser::tokenise_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
+    loop {
+        let token = tokens.next();
+        match token {
+            None => break,
+            Some(_) => (),
+        }
+    }
+    assert!(tokens.next().is_none())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use io::Read;
+    use parser::Item;
+
+    #[test]
+    fn can_parse_xml() {
+        let mut xml = get_parsed_xml_file(&Path::new("vulkan_XML/vk.xml")).unwrap();
+        assert_ne!(xml.next().unwrap().unwrap(), Item::EndFile);
+        loop {
+            match xml.next().unwrap().unwrap() {
+                Item::EndFile => break,
+                _ => (),
+            }
+        }
+        assert!(xml.next().is_none())
+    }
+
+    #[derive(Clone, Debug, PartialEq, Eq)]
+    pub(super) struct TestReader {
+        data: io::Cursor<Vec<u8>>,
+        fail: bool,
+    }
+
+    const TEST_READER_ERROR_STRING: &str = "Test";
+    pub(super) const PARSER_IO_ERROR_TEST_STRING: &str = "an io error occurred: \"Test\"";
+
+    impl TestReader {
+        pub(super) fn new(value: &str) -> Self {
+            Self {
+                data: io::Cursor::new(value.as_bytes().to_vec()),
+                fail: false,
+            }
+        }
+
+        pub(super) fn with_fail_on_end(mut self, value: bool) -> Self {
+            self.fail = value;
+            self
+        }
+    }
+
+    impl Read for TestReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            match self.data.read(buf) {
+                Ok(0) if self.fail => Err(io::Error::new(
+                    io::ErrorKind::Other,
+                    TEST_READER_ERROR_STRING,
+                )),
+                other => other,
+            }
         }
     }
 }

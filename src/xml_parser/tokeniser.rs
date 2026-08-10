@@ -12,7 +12,7 @@ use std::iter::FusedIterator;
 use std::path::Path;
 
 pub(super) fn tokenise_xml_file(file_path: &Path) -> Result<TokenisedXml<File>, ParserError> {
-    Ok(TokenisedXml::from(File::open(file_path)?))
+    Ok(TokenisedXml::new(File::open(file_path)?))
 }
 
 /// The functions of the tokeniser that this creates use blocking functions for reading in the data.
@@ -22,7 +22,6 @@ pub(super) fn tokenise_xml_file(file_path: &Path) -> Result<TokenisedXml<File>, 
 /// computer, and this code is in no way related to security anyway.
 #[derive(Debug)]
 pub(super) struct TokenisedXml<T: Read> {
-
     // The source of text that the buffer reads from
     text: BufReader<T>,
 
@@ -41,7 +40,7 @@ pub(super) struct TokenisedXml<T: Read> {
 
 impl<T: Read> TokenisedXml<T> {
     /// Creates a new instance of the tokeniser from the provided text.
-    fn new(text: T) -> Self {
+    pub(super) fn new(text: T) -> Self {
         let text = BufReader::new(text);
         Self {
             text,
@@ -53,16 +52,7 @@ impl<T: Read> TokenisedXml<T> {
     }
 }
 
-impl<T: Read> From<T> for TokenisedXml<T> {
-
-    /// A wrapper around new()
-    fn from(text: T) -> Self {
-        Self::new(text)
-    }
-}
-
 impl<T: Read> Iterator for TokenisedXml<T> {
-
     type Item = Result<Token, ParserError>;
 
     /// Returns the next token available, returning None if we have reached the end of the stream or
@@ -137,10 +127,13 @@ impl<T: Read> TokenisedXml<T> {
                         None => break,
                     }
                 }
-                (word_length, Some(Ok(Token::Word(String::from(
-                    &self.buffer[self.byte_offset..self.byte_offset + word_length]
-                )))))
-            },
+                (
+                    word_length,
+                    Some(Ok(Token::Word(String::from(
+                        &self.buffer[self.byte_offset..self.byte_offset + word_length],
+                    )))),
+                )
+            }
         };
         self.byte_offset += byte_length;
         token
@@ -172,7 +165,7 @@ impl<T: Read> TokenisedXml<T> {
 
 /// Describes a single token found in the XML stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Token {
+pub(super) enum Token {
     StartTag,
     EndTag,
     QuestionMark,
@@ -200,6 +193,7 @@ impl std::fmt::Display for Token {
 
 #[cfg(test)]
 mod tests {
+    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TestReader};
     use super::*;
 
     #[test]
@@ -236,7 +230,7 @@ mod tests {
             ("abc", Token::Word(String::from("abc"))),
         ];
         for test in test_data {
-            let mut xml = TokenisedXml::from(TestReader::from(test.0));
+            let mut xml = TokenisedXml::new(TestReader::new(test.0));
             assert_eq!(xml.next().unwrap().unwrap(), test.1);
             assert!(xml.next().is_none());
             assert!(xml.next().is_none());
@@ -271,13 +265,13 @@ mod tests {
             ),
         ];
         for test in test_data {
-            let mut xml = TokenisedXml::from(TestReader::from(test.0).with_fail_on_end(true));
+            let mut xml = TokenisedXml::new(TestReader::new(test.0).with_fail_on_end(true));
             for token in test.1 {
                 assert_eq!(xml.next().unwrap().unwrap(), token);
             }
             assert_eq!(
                 xml.next().unwrap().unwrap_err().to_string(),
-                PARSER_ERROR_TEST_STRING
+                PARSER_IO_ERROR_TEST_STRING
             );
             assert!(xml.next().is_none());
         }
@@ -285,7 +279,7 @@ mod tests {
 
     #[test]
     fn test_peeking() {
-        let mut xml = TokenisedXml::from(TestReader::from("<Test 猫/>\n").with_fail_on_end(true));
+        let mut xml = TokenisedXml::new(TestReader::new("<Test 猫/>\n").with_fail_on_end(true));
         let result = vec![
             Token::StartTag,
             Token::Word(String::from("Test")),
@@ -295,8 +289,14 @@ mod tests {
             Token::EndTag,
             Token::Whitespace('\n'),
         ];
-        assert_eq!(*xml.peek().unwrap().as_ref().unwrap(), result.get(0).unwrap().clone());
-        assert_eq!(*xml.peek().unwrap().as_ref().unwrap(), result.get(0).unwrap().clone());
+        assert_eq!(
+            *xml.peek().unwrap().as_ref().unwrap(),
+            result.get(0).unwrap().clone()
+        );
+        assert_eq!(
+            *xml.peek().unwrap().as_ref().unwrap(),
+            result.get(0).unwrap().clone()
+        );
         for i in 0..result.len() {
             assert_eq!(
                 *xml.peek_n(i).unwrap().as_ref().unwrap(),
@@ -305,14 +305,24 @@ mod tests {
         }
         assert!(xml.peek_n(result.len() + 1).is_none());
         assert_eq!(
-            xml.peek_n(result.len()).unwrap().as_ref().unwrap_err().to_string(),
-            PARSER_ERROR_TEST_STRING
+            xml.peek_n(result.len())
+                .unwrap()
+                .as_ref()
+                .unwrap_err()
+                .to_string(),
+            PARSER_IO_ERROR_TEST_STRING
         );
-        assert_eq!(*xml.peek().unwrap().as_ref().unwrap(), result.get(0).unwrap().clone());
+        assert_eq!(
+            *xml.peek().unwrap().as_ref().unwrap(),
+            result.get(0).unwrap().clone()
+        );
         for test in result {
             assert_eq!(xml.next().unwrap().unwrap(), test);
         }
-        assert_eq!(xml.next().unwrap().unwrap_err().to_string(), PARSER_ERROR_TEST_STRING);
+        assert_eq!(
+            xml.next().unwrap().unwrap_err().to_string(),
+            PARSER_IO_ERROR_TEST_STRING
+        );
         assert!(xml.next().is_none());
     }
 
@@ -332,41 +342,6 @@ mod tests {
         ];
         for test in data {
             assert_eq!(test.0.to_string(), test.1);
-        }
-    }
-
-    #[derive(Clone, Debug, PartialEq, Eq)]
-    struct TestReader {
-        data: io::Cursor<Vec<u8>>,
-        fail: bool,
-    }
-
-    const TEST_READER_ERROR_STRING: &str = "Test";
-    const PARSER_ERROR_TEST_STRING: &str = "an io error occurred: \"Test\"";
-
-    impl From<&str> for TestReader {
-        fn from(value: &str) -> Self {
-            Self {
-                data: io::Cursor::new(value.as_bytes().to_vec()),
-                fail: false,
-            }
-        }
-    }
-
-    impl Read for TestReader {
-        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-            match self.data.read(buf) {
-                Ok(0) if self.fail =>
-                    Err(io::Error::new(io::ErrorKind::Other, TEST_READER_ERROR_STRING)),
-                other => other,
-            }
-        }
-    }
-
-    impl TestReader {
-        fn with_fail_on_end(mut self, value: bool) -> Self {
-            self.fail = value;
-            self
         }
     }
 }
