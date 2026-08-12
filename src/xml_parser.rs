@@ -6,7 +6,12 @@
 //! sections I care about right now.
 //! It also cannot handle CDATA or using single quotes to encode text, as these are also not used in
 //! vk.xml.
-//! It also ignores the contents of the <? ?> block if it is present.
+//! It also ignores the contents of the `<? ?>` block if it is present, and just skips until it finds
+//! the ending `?` character.
+//! If there is text after the end of the root element, it is also ignored
+//! Another element after the end of the root element will cause error.
+//! If the file ends or has an invalid token during a self-closing element, e.g. `<element/` or
+//! `<element/<`, the opening of the element will be returned, followed by an error.
 
 mod format_parser;
 mod parser;
@@ -27,13 +32,7 @@ fn get_parsed_xml_file(path: &Path) -> Result<ParsedXml<File>, ParserError> {
 /// TODO remove once an actual use is implemented
 pub fn temp() {
     let mut xml = get_parsed_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
-    assert_ne!(xml.next().unwrap().unwrap(), parser::Item::EndFile);
-    loop {
-        match xml.next().unwrap().unwrap() {
-            parser::Item::EndFile => break,
-            _ => (),
-        }
-    }
+    while !xml.next().is_none() {}
     assert!(xml.next().is_none())
 }
 
@@ -117,17 +116,16 @@ pub fn benchmark_tokeniser() {
 mod tests {
     use super::*;
     use io::Read;
-    use parser::Item;
 
     #[test]
     fn can_parse_xml() {
-        let mut xml = get_parsed_xml_file(&Path::new("vulkan_XML/vk.xml")).unwrap();
-        assert_ne!(xml.next().unwrap().unwrap(), Item::EndFile);
+        let mut xml = get_parsed_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
         loop {
-            match xml.next().unwrap().unwrap() {
-                Item::EndFile => break,
-                _ => (),
+            let val = xml.next();
+            if val.is_none() {
+                break;
             }
+            let _ = val.unwrap().unwrap();
         }
         assert!(xml.next().is_none())
     }

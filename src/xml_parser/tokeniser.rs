@@ -176,6 +176,22 @@ pub(super) enum Token {
     Whitespace(char),
 }
 
+impl Token {
+    //TODO test
+    pub(super) fn to_text(self) -> Text {
+        match self {
+            Token::StartTag => Text::Char('<'),
+            Token::EndTag => Text::Char('>'),
+            Token::QuestionMark => Text::Char('?'),
+            Token::Slash => Text::Char('/'),
+            Token::Equals => Text::Char('='),
+            Token::QuotationMark => Text::Char('\"'),
+            Token::Word(word) => Text::String(word),
+            Token::Whitespace(char) => Text::Char(char),
+        }
+    }
+}
+
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -187,6 +203,24 @@ impl std::fmt::Display for Token {
             Token::QuotationMark => write!(f, "Quotation mark: '\"'"),
             Token::Word(word) => write!(f, "Word: \"{word}\""),
             Token::Whitespace(c) => write!(f, "Whitespace character: '{c}'"),
+        }
+    }
+}
+
+pub(super) enum Text {
+    Char(char),
+    String(String),
+}
+
+impl Text {
+    pub(super) fn add_to_string(self, mut str: String) -> String {
+        //TODO test
+        match self {
+            Text::Char(char) => {
+                str.push(char);
+                str
+            }
+            Text::String(new) => str + &new,
         }
     }
 }
