@@ -6,6 +6,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     c.bench_function("tokenising vk.xml", |b| {
         b.iter(|| xml_parser::benchmark_tokeniser())
     });
+    c.bench_function("parsing vk.xml", |b| {
+        b.iter(|| xml_parser::benchmark_parser())
+    });
 }
 
 #[cfg(feature = "bench")]

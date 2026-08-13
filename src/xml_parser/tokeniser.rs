@@ -5,7 +5,6 @@
 //! This is plenty performant for the use case (literally just the build script).
 
 use super::ParserError;
-use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::iter::FusedIterator;
@@ -25,9 +24,6 @@ pub(super) struct TokenisedXml<T: Read> {
     // The source of text that the buffer reads from
     text: BufReader<T>,
 
-    // Stores the next tokens to allow for peeking.
-    next: VecDeque<Result<Token, ParserError>>,
-
     // Stores if we have reached the end of the tokens.
     finished: bool,
 
@@ -44,7 +40,6 @@ impl<T: Read> TokenisedXml<T> {
         let text = BufReader::new(text);
         Self {
             text,
-            next: VecDeque::new(),
             finished: false,
             buffer: String::new(),
             byte_offset: 0,
@@ -57,43 +52,22 @@ impl<T: Read> Iterator for TokenisedXml<T> {
 
     /// Returns the next token available, returning None if we have reached the end of the stream or
     /// `Some(Err(e))` if we have run into some error.
+    /// Acts as a layer on top of `get_next_token` to ensure that it is not called again once it
+    /// gives a bad response.
     fn next(&mut self) -> Option<Self::Item> {
-        if self.next.is_empty() {
-            self.add_token_to_queue()
+        if !self.finished {
+            let result = self.get_next_token();
+            self.finished = matches!(result, Some(Err(_)) | None);
+            result
+        } else {
+            None
         }
-        self.next.pop_front()
     }
 }
 
 impl<T: Read> FusedIterator for TokenisedXml<T> {}
 
 impl<T: Read> TokenisedXml<T> {
-    pub(super) fn peek(&mut self) -> Option<&Result<Token, ParserError>> {
-        self.peek_n(0)
-    }
-
-    /// Returns the ith token without consuming any.
-    /// Indexing starts at 0, meaning that `peek_n(0)` will return the same value as `peek()`.
-    pub(super) fn peek_n(&mut self, n: usize) -> Option<&Result<Token, ParserError>> {
-        while self.next.len() <= n && !self.finished {
-            self.add_token_to_queue();
-        }
-        self.next.get(n)
-    }
-
-    /// Gets the next token and pushed it to the queue
-    /// Also acts as a layer on top of `get_next_token` to ensure that it is not called again once
-    /// it gives a bad response.
-    fn add_token_to_queue(&mut self) {
-        if !self.finished {
-            let result = self.get_next_token();
-            self.finished = matches!(result, Some(Err(_)) | None);
-            if let Some(r) = result {
-                self.next.push_back(r);
-            }
-        }
-    }
-
     /// Returns the next token in the sequence.
     /// The behaviour after a `Some(Err(e))` or `None` result is returned is undefined.
     /// For this reason, this should be only used through add_token_to_queue.
@@ -177,18 +151,17 @@ pub(super) enum Token {
 }
 
 impl Token {
-    //TODO test
-    pub(super) fn to_text(self) -> Text {
+    pub(super) fn on_end_of_string(self, str: &mut String) {
         match self {
-            Token::StartTag => Text::Char('<'),
-            Token::EndTag => Text::Char('>'),
-            Token::QuestionMark => Text::Char('?'),
-            Token::Slash => Text::Char('/'),
-            Token::Equals => Text::Char('='),
-            Token::QuotationMark => Text::Char('\"'),
-            Token::Word(word) => Text::String(word),
-            Token::Whitespace(char) => Text::Char(char),
-        }
+            Token::StartTag => str.push('<'),
+            Token::EndTag => str.push('>'),
+            Token::QuestionMark => str.push('?'),
+            Token::Slash => str.push('/'),
+            Token::Equals => str.push('='),
+            Token::QuotationMark => str.push('\"'),
+            Token::Word(word) => *str += word.as_str(),
+            Token::Whitespace(char) => str.push(char),
+        };
     }
 }
 
@@ -203,24 +176,6 @@ impl std::fmt::Display for Token {
             Token::QuotationMark => write!(f, "Quotation mark: '\"'"),
             Token::Word(word) => write!(f, "Word: \"{word}\""),
             Token::Whitespace(c) => write!(f, "Whitespace character: '{c}'"),
-        }
-    }
-}
-
-pub(super) enum Text {
-    Char(char),
-    String(String),
-}
-
-impl Text {
-    pub(super) fn add_to_string(self, mut str: String) -> String {
-        //TODO test
-        match self {
-            Text::Char(char) => {
-                str.push(char);
-                str
-            }
-            Text::String(new) => str + &new,
         }
     }
 }
@@ -312,52 +267,25 @@ mod tests {
     }
 
     #[test]
-    fn test_peeking() {
-        let mut xml = TokenisedXml::new(TestReader::new("<Test 猫/>\n").with_fail_on_end(true));
-        let result = vec![
-            Token::StartTag,
-            Token::Word(String::from("Test")),
-            Token::Whitespace(' '),
-            Token::Word(String::from("猫")),
-            Token::Slash,
-            Token::EndTag,
-            Token::Whitespace('\n'),
+    fn test_token_to_text() {
+        let data = [
+            ("test", Token::StartTag, "test<"),
+            ("", Token::EndTag, ">"),
+            (" ", Token::QuestionMark, " ?"),
+            ("\n", Token::Slash, "\n/"),
+            ("", Token::Equals, "="),
+            ("", Token::QuotationMark, "\""),
+            ("", Token::Whitespace(' '), " "),
+            ("", Token::Word(String::new()), ""),
+            ("", Token::Word(String::from("test")), "test"),
+            ("test", Token::Word(String::new()), "test"),
+            ("test", Token::Word(String::from(" more")), "test more"),
         ];
-        assert_eq!(
-            *xml.peek().unwrap().as_ref().unwrap(),
-            result.get(0).unwrap().clone()
-        );
-        assert_eq!(
-            *xml.peek().unwrap().as_ref().unwrap(),
-            result.get(0).unwrap().clone()
-        );
-        for i in 0..result.len() {
-            assert_eq!(
-                *xml.peek_n(i).unwrap().as_ref().unwrap(),
-                result.get(i).unwrap().clone()
-            );
+        for test in data {
+            let mut str = String::from(test.0);
+            test.1.on_end_of_string(&mut str);
+            assert_eq!(str, test.2)
         }
-        assert!(xml.peek_n(result.len() + 1).is_none());
-        assert_eq!(
-            xml.peek_n(result.len())
-                .unwrap()
-                .as_ref()
-                .unwrap_err()
-                .to_string(),
-            PARSER_IO_ERROR_TEST_STRING
-        );
-        assert_eq!(
-            *xml.peek().unwrap().as_ref().unwrap(),
-            result.get(0).unwrap().clone()
-        );
-        for test in result {
-            assert_eq!(xml.next().unwrap().unwrap(), test);
-        }
-        assert_eq!(
-            xml.next().unwrap().unwrap_err().to_string(),
-            PARSER_IO_ERROR_TEST_STRING
-        );
-        assert!(xml.next().is_none());
     }
 
     #[test]

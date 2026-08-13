@@ -112,6 +112,19 @@ pub fn benchmark_tokeniser() {
     assert!(tokens.next().is_none())
 }
 
+#[cfg(feature = "bench")]
+pub fn benchmark_parser() {
+    let mut parser = parser::parse_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
+    loop {
+        let item = parser.next();
+        match item {
+            None => break,
+            Some(_) => (),
+        }
+    }
+    assert!(parser.next().is_none())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
