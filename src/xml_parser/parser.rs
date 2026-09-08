@@ -1,3 +1,9 @@
+//! This parser turns the stream of tokens into parsed elements.
+//!
+//! This code may have some slight inefficiencies, but performance wise it is more than plenty.
+//! We only run this in the build script, and it is benchmarked as taking 20.983ms to parse all the
+//! tokens in vk.xml.
+
 use super::ParserError;
 use super::tokeniser::{
     Token::{self, *},
@@ -9,13 +15,13 @@ use std::io::Read;
 use std::iter::{FusedIterator, Iterator};
 use std::path::Path;
 
-pub(super) fn parse_xml_file(file_path: &Path) -> Result<ParsedXml<File>, ParserError> {
+pub(super) fn parse_xml_file(file_path: impl AsRef<Path>) -> Result<ParsedXml<File>, ParserError> {
     Ok(ParsedXml::new(tokenise_xml_file(file_path)?))
 }
 
 #[derive(Debug)]
 pub(super) struct ParsedXml<T: Read> {
-    pub tokens: TokenisedXml<T>,
+    tokens: TokenisedXml<T>,
     names: Vec<String>,
     state: State,
     is_done: bool,
@@ -40,14 +46,15 @@ enum State {
     Declaration {
         found_ending_question_mark: bool,
     },
-    StartTagFoundAfterRoot,
+    StartTagFound,
     Element {
         name: String,
         attributes: Vec<(String, String)>,
-        current_attribute_name: Option<String>,
-        equals_found: bool,
-        quotation_mark_found: bool,
-        current_attribute_text: String,
+        stage: ElementStage,
+        // We keep thest two strings as part of Element not ElementStage to allow us to mutate both
+        // these and the stage without hitting borrow checker issues.
+        current_attribute_name: String,
+        current_attribute_value: String,
     },
     Neutral,
     TextBlock(String),
@@ -57,7 +64,15 @@ enum State {
     },
 }
 
-impl<'a, T: Read> ParsedXml<T> {
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum ElementStage {
+    ExpectingAttributeName,
+    ExpectingEquals,
+    ExpectingQuotationMark,
+    ReadingAttributeValue,
+}
+
+impl<T: Read> ParsedXml<T> {
     fn new(tokens: TokenisedXml<T>) -> Self {
         ParsedXml {
             tokens,
@@ -127,201 +142,204 @@ impl<T: Read> ParsedXml<T> {
     }
 
     fn process_token(&mut self, token: Token) -> Option<Result<Item, ParserError>> {
-        let (new_state, result) = match &mut self.state {
+        match &mut self.state {
             Start {
                 found_declaration,
                 found_start_tag: false,
             } => match token {
-                Whitespace(_) => (None, None),
-                StartTag => (
-                    Some(Start {
+                Whitespace(_) => None,
+                StartTag => {
+                    self.state = Start {
                         found_declaration: *found_declaration,
                         found_start_tag: true,
-                    }),
-                    None,
-                ),
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                    };
+                    None
+                }
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
             Start {
                 found_declaration,
                 found_start_tag: true,
             } => match token {
-                QuestionMark if !*found_declaration => (
-                    Some(Declaration {
+                QuestionMark if !*found_declaration => {
+                    self.state = Declaration {
                         found_ending_question_mark: false,
-                    }),
-                    None,
-                ),
-                Word(name) => (
-                    Some(Element {
+                    };
+                    None
+                },
+                Word(name) => {
+                    self.state = Element {
                         name,
                         attributes: Vec::new(),
-                        current_attribute_name: None,
-                        equals_found: false,
-                        quotation_mark_found: false,
-                        current_attribute_text: String::new(),
-                    }),
-                    None,
-                ),
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                        stage: ElementStage::ExpectingAttributeName,
+                        current_attribute_name: String::new(),
+                        current_attribute_value: String::new(),
+                    };
+                    None
+                },
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
 
             Declaration {
                 found_ending_question_mark: false,
             } => {
                 if token == QuestionMark {
-                    (
-                        Some(Declaration {
-                            found_ending_question_mark: true,
-                        }),
-                        None,
-                    )
-                } else {
-                    (None, None)
+                    self.state = Declaration {
+                        found_ending_question_mark: true,
+                    };
                 }
+                None
             },
             Declaration {
-                found_ending_question_mark: true,
+                found_ending_question_mark,
             } => match token {
-                EndTag => (
-                    Some(Start {
+                EndTag => {
+                    self.state = Start {
                         found_declaration: true,
                         found_start_tag: false,
-                    }),
-                    None,
-                ),
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                    };
+                    None
+                },
+                QuestionMark => None,
+                _ => {
+                    *found_ending_question_mark = false;
+                    None
+                },
             },
 
-            StartTagFoundAfterRoot => match token {
+            StartTagFound => match token {
                 Word(name) => {
                     if !self.names.is_empty() {
-                        (
-                            Some(Element {
-                                name,
-                                attributes: Vec::new(),
-                                current_attribute_name: None,
-                                equals_found: false,
-                                quotation_mark_found: false,
-                                current_attribute_text: String::new(),
-                            }),
-                            None,
-                        )
+                        self.state = Element {
+                            name,
+                            attributes: Vec::new(),
+                            stage: ElementStage::ExpectingAttributeName,
+                            current_attribute_name: String::new(),
+                            current_attribute_value: String::new(),
+                        };
+                        None
                     } else {
-                        (None, Some(Err(ParserError::MultipleRootElements)))
+                        Some(Err(ParserError::MultipleRootElements))
                     }
                 }
                 Slash => {
-                    (
-                        Some(ClosingElement {
-                            name_checked: false,
-                        }),
-                        None,
-                    )
+                    self.state = ClosingElement {
+                        name_checked: false,
+                    };
+                    None
                 },
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
 
             Element {
                 name,
                 attributes,
+                stage: stage @ ElementStage::ExpectingAttributeName,
                 current_attribute_name,
                 ..
-            } if current_attribute_name.is_none() => match token {
-                Whitespace(_) => (None, None),
+            } => match token {
+                Whitespace(_) => None,
                 EndTag => {
                     self.names.push(name.clone());
-                    (Some(Neutral), Some(Ok(Item::Element {
-                        name: std::mem::take(name),
-                        attributes: std::mem::take(attributes),
-                    })))
-                }
+                    let name = std::mem::take(name);
+                    let attributes = std::mem::take(attributes);
+                    self.state = Neutral;
+                    Some(Ok(Item::Element {
+                        name,
+                        attributes,
+                    }))
+                },
                 Word(attribute_name) => {
-                    *current_attribute_name = Some(attribute_name);
-                    (None, None)
+                    *stage = ElementStage::ExpectingEquals;
+                    *current_attribute_name = attribute_name;
+                    None
                 },
                 Slash => {
-                    (
-                        Some(SelfClosingElement),
-                        Some(Ok(Item::Element {
-                            name: std::mem::take(name),
-                            attributes: std::mem::take(attributes),
-                        })),
-                    )
+                    let name = std::mem::take(name);
+                    let attributes = std::mem::take(attributes);
+                    self.state = SelfClosingElement;
+                    Some(Ok(Item::Element {
+                        name,
+                        attributes,
+                    }))
                 },
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
             Element {
-                equals_found,
+                stage: stage @ ElementStage::ExpectingEquals,
                 ..
-            } if !*equals_found => match token {
+            } => match token {
                 Equals => {
-                    *equals_found = true;
-                    (None, None)
+                    *stage = ElementStage::ExpectingQuotationMark;
+                    None
                 },
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                Whitespace(_) => None,
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
             Element {
-                quotation_mark_found,
+                stage: stage @ ElementStage::ExpectingQuotationMark,
                 ..
-            } if !*quotation_mark_found => match token {
+            } => match token {
                 QuotationMark => {
-                    *quotation_mark_found = true;
-                    (None, None)
+                    *stage = ElementStage::ReadingAttributeValue;
+                    None
                 },
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                Whitespace(_) => None,
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
             Element {
                 attributes,
+                stage: stage @ ElementStage::ReadingAttributeValue,
                 current_attribute_name,
-                equals_found,
-                quotation_mark_found,
-                current_attribute_text,
+                current_attribute_value,
                 ..
             } => match token {
                 QuotationMark => {
                     attributes.push((
-                        std::mem::take(current_attribute_name).unwrap(),
-                        std::mem::take(current_attribute_text),
+                        std::mem::take(current_attribute_name),
+                        std::mem::take(current_attribute_value),
                     ));
-                    *equals_found = false;
-                    *quotation_mark_found = false;
-                    *current_attribute_text = String::new();
-                    (None, None)
+                    *stage = ElementStage::ExpectingAttributeName;
+                    None
                 }
-                StartTag => (None, Some(Err(ParserError::InvalidToken(StartTag)))),
+                StartTag => Some(Err(ParserError::InvalidToken(StartTag))),
                 t => {
-                    t.on_end_of_string(current_attribute_text);
-                    (None, None)
+                    t.append_to(current_attribute_value);
+                    None
                 },
             },
 
             Neutral => match token {
                 StartTag => {
-                    (Some(StartTagFoundAfterRoot), None)
+                    self.state = StartTagFound;
+                    None
                 },
                 t => {
                     let mut text = String::new();
-                    t.on_end_of_string(&mut text);
-                    (Some(TextBlock(text)), None)
+                    t.append_to(&mut text);
+                    self.state = TextBlock(text);
+                    None
                 }
             },
 
             TextBlock(text) => match token {
                 StartTag => {
-                    (Some(StartTagFoundAfterRoot), Some(Ok(Item::Text(std::mem::take(text)))))
+                    let text = std::mem::take(text);
+                    self.state = StartTagFound;
+                    Some(Ok(Item::Text(text)))
                 },
                 t => {
-                    t.on_end_of_string(text);
-                    (None, None)
+                    t.append_to(text);
+                    None
                 },
             },
 
             SelfClosingElement => match token {
                 EndTag => {
-                    (Some(Neutral), Some(Ok(Item::EndCurrentElement)))
+                    self.state = Neutral;
+                    Some(Ok(Item::EndCurrentElement))
                 },
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
 
             ClosingElement {
@@ -329,36 +347,26 @@ impl<T: Read> ParsedXml<T> {
             } => match token {
                 Word(name) => match self.names.pop() {
                     Some(expected) if expected == name => {
-                        (Some(ClosingElement { name_checked: true }), None)
+                        self.state = ClosingElement {name_checked: true};
+                        None
                     }
-                    Some(expected) => (
-                        None,
-                            Some(Err(ParserError::ElementsClosedOutOfOrder {
-                            correct: expected,
-                            found: name,
-                        })),
-                    ),
-                    None => (
-                        None,
-                        Some(Err(ParserError::ElementClosedAfterRootElementClosed(name))),
-                    ),
+                    Some(expected) => Some(Err(ParserError::ElementsClosedOutOfOrder {
+                        correct: expected,
+                        found: name,
+                    })),
+                    None => Some(Err(ParserError::ElementClosedAfterRootElementClosed(name)))
                 },
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
             ClosingElement { name_checked: true } => match token {
-                EndTag if self.names.is_empty() => {
-                    (Some(Neutral), Some(Ok(Item::EndCurrentElement)))
-                }
-                EndTag => (Some(Neutral), Some(Ok(Item::EndCurrentElement))),
-                Whitespace(_) => (None, None),
-                t => (None, Some(Err(ParserError::InvalidToken(t)))),
+                EndTag => {
+                    self.state = Neutral;
+                    Some(Ok(Item::EndCurrentElement))
+                },
+                Whitespace(_) => None,
+                t => Some(Err(ParserError::InvalidToken(t))),
             },
-        };
-
-        if let Some(new_state) = new_state {
-            self.state = new_state;
         }
-        result
     }
 
     fn handle_no_more_tokens(&mut self) -> Result<(), ParserError> {
@@ -372,7 +380,7 @@ impl<T: Read> ParsedXml<T> {
                 ..
             } => Err(ParserError::FileCutShortAbruptlyDuringTag),
             Declaration { .. } => Err(ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
-            StartTagFoundAfterRoot => Err(ParserError::FileCutShortAbruptlyDuringTag),
+            StartTagFound => Err(ParserError::FileCutShortAbruptlyDuringTag),
             Element { .. } => Err(ParserError::FileCutShortAbruptlyDuringTag),
             Neutral if self.names.is_empty() => Ok(()),
             Neutral => Err(ParserError::ElementNotClosed),
@@ -425,11 +433,7 @@ mod tests {
             ("\n\t \"", ParserError::InvalidToken(QuotationMark)),
             ("?", ParserError::InvalidToken(QuestionMark)),
             ("<?", ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
-            ("<??", ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
-            ("<??<", ParserError::InvalidToken(StartTag)),
-            ("<??\"", ParserError::InvalidToken(QuotationMark)),
-            ("<??=", ParserError::InvalidToken(Equals)),
-            ("<???", ParserError::InvalidToken(QuestionMark)),
+            ("<????test?", ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
         ];
         for test in data {
             assert_eq!(
@@ -715,14 +719,12 @@ mod tests {
             ("<element name?", ParserError::InvalidToken(QuestionMark)),
             ("<element name/", ParserError::InvalidToken(Slash)),
             ("<element name\"", ParserError::InvalidToken(QuotationMark)),
-            ("<element name ", ParserError::InvalidToken(Whitespace(' '))),
             ("<element name=", ParserError::FileCutShortAbruptlyDuringTag),
             ("<element name=<", ParserError::InvalidToken(StartTag)),
             ("<element name=>", ParserError::InvalidToken(EndTag)),
-            ("<element name=?", ParserError::InvalidToken(QuestionMark)),
-            ("<element name=/", ParserError::InvalidToken(Slash)),
-            ("<element name==", ParserError::InvalidToken(Equals)),
-            ("<element name= ", ParserError::InvalidToken(Whitespace(' '))),
+            ("<element name =?", ParserError::InvalidToken(QuestionMark)),
+            ("<element name= /", ParserError::InvalidToken(Slash)),
+            ("<element name = =", ParserError::InvalidToken(Equals)),
             ("<element name=\"", ParserError::FileCutShortAbruptlyDuringTag),
             ("<element name=\"text", ParserError::FileCutShortAbruptlyDuringTag),
             ("<element name=\">?/=Value <", ParserError::InvalidToken(StartTag)),

@@ -6,14 +6,17 @@
 //! sections I care about right now.
 //! It also cannot handle CDATA or using single quotes to encode text, as these are also not used in
 //! vk.xml.
-//! It also ignores the contents of the `<? ?>` block if it is present, and just skips until it finds
-//! the ending `?` character.
+//! It also ignores the contents of the `<? ?>` block if it is present, and just skips until it
+//! finds the ending `?` character.
 //! If there is text after the end of the root element, it is also ignored
 //! Another element after the end of the root element will cause error.
 //! If the file ends or has an invalid token during a self-closing element, e.g. `<element/` or
 //! `<element/<`, the opening of the element will be returned, followed by an error.
+//! We also do not enforce whitespace between the end of one value and the start of another.
+//!
+//! Performance wise, we can tokenise and parse the entirety of vk.xml in a benchmarked 45.025ms,
+//! which is more than fast enough for code used only in the build script
 
-mod format_parser;
 mod parser;
 mod tokeniser;
 
@@ -24,7 +27,7 @@ use std::path::Path;
 
 const VULKAN_XML_PATH: &str = "vulkan_XML/vk.xml";
 
-fn get_parsed_xml_file(path: &Path) -> Result<ParsedXml<File>, ParserError> {
+fn get_parsed_xml_file(path: impl AsRef<Path>) -> Result<ParsedXml<File>, ParserError> {
     parser::parse_xml_file(path)
 }
 
@@ -32,7 +35,7 @@ fn get_parsed_xml_file(path: &Path) -> Result<ParsedXml<File>, ParserError> {
 /// TODO remove once an actual use is implemented
 pub fn temp() {
     let mut xml = get_parsed_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
-    while !xml.next().is_none() {}
+    while xml.next().is_some() {}
     assert!(xml.next().is_none())
 }
 
@@ -78,7 +81,7 @@ impl std::fmt::Display for ParserError {
                 f,
                 "an invalid \"{t}\" token was found where it should not have been"
             ),
-            ParserError::IoError(e) => write!(f, "an io error occurred: \"{e}\""),
+            ParserError::IoError(_) => write!(f, "an io error occurred while reading the XML"),
         }
     }
 }
@@ -94,35 +97,19 @@ impl std::error::Error for ParserError {
             ParserError::ElementsClosedOutOfOrder { .. } => None,
             ParserError::ElementClosedAfterRootElementClosed(_) => None,
             ParserError::InvalidToken(_) => None,
-            ParserError::IoError(e) => e.source(),
+            ParserError::IoError(e) => Some(e),
         }
     }
 }
 
 #[cfg(feature = "bench")]
 pub fn benchmark_tokeniser() {
-    let mut tokens = tokeniser::tokenise_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
-    loop {
-        let token = tokens.next();
-        match token {
-            None => break,
-            Some(_) => (),
-        }
-    }
-    assert!(tokens.next().is_none())
+    for _ in tokeniser::tokenise_xml_file(Path::new(VULKAN_XML_PATH)).unwrap() {}
 }
 
 #[cfg(feature = "bench")]
 pub fn benchmark_parser() {
-    let mut parser = parser::parse_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
-    loop {
-        let item = parser.next();
-        match item {
-            None => break,
-            Some(_) => (),
-        }
-    }
-    assert!(parser.next().is_none())
+    for _ in parser::parse_xml_file(Path::new(VULKAN_XML_PATH)).unwrap() {}
 }
 
 #[cfg(test)]
@@ -150,7 +137,8 @@ mod tests {
     }
 
     const TEST_READER_ERROR_STRING: &str = "Test";
-    pub(super) const PARSER_IO_ERROR_TEST_STRING: &str = "an io error occurred: \"Test\"";
+    pub(super) const PARSER_IO_ERROR_TEST_STRING: &str =
+        "an io error occurred while reading the XML";
 
     impl TestReader {
         pub(super) fn new(value: &str) -> Self {
@@ -169,10 +157,7 @@ mod tests {
     impl Read for TestReader {
         fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
             match self.data.read(buf) {
-                Ok(0) if self.fail => Err(io::Error::new(
-                    io::ErrorKind::Other,
-                    TEST_READER_ERROR_STRING,
-                )),
+                Ok(0) if self.fail => Err(io::Error::other(TEST_READER_ERROR_STRING)),
                 other => other,
             }
         }

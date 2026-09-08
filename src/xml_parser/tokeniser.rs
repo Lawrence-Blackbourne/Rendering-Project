@@ -1,7 +1,7 @@
 //! The tokeniser that turns the text file into a stream of tokens.
 //!
 //! A note on performance - using Word(String) is inefficient, causing many heap allocations.
-//! However, this parser is benchmarked at parsing the entirety of vk.xml in sub 30ms.
+//! However, this parser is benchmarked at parsing the entirety of vk.xml in 24.042ms.
 //! This is plenty performant for the use case (literally just the build script).
 
 use super::ParserError;
@@ -10,7 +10,9 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::iter::FusedIterator;
 use std::path::Path;
 
-pub(super) fn tokenise_xml_file(file_path: &Path) -> Result<TokenisedXml<File>, ParserError> {
+pub(super) fn tokenise_xml_file(
+    file_path: impl AsRef<Path>
+) -> Result<TokenisedXml<File>, ParserError> {
     Ok(TokenisedXml::new(File::open(file_path)?))
 }
 
@@ -69,8 +71,8 @@ impl<T: Read> FusedIterator for TokenisedXml<T> {}
 
 impl<T: Read> TokenisedXml<T> {
     /// Returns the next token in the sequence.
-    /// The behaviour after a `Some(Err(e))` or `None` result is returned is undefined.
-    /// For this reason, this should be only used through add_token_to_queue.
+    /// The behaviour after a `Some(Err(e))` or `None` result is returned is unspecified.
+    /// For this reason, this should be only used through `next()`.
     fn get_next_token(&mut self) -> Option<Result<Token, ParserError>> {
         // This function cannot handle tokens that span across `\n` characters, but no token can do
         // that so this is fine.
@@ -84,13 +86,13 @@ impl<T: Read> TokenisedXml<T> {
         // to this point if we got Ok(true).
         let mut chars = self.buffer[self.byte_offset..].chars();
         let (byte_length, token) = match chars.next().unwrap() {
-            '<' => (1, Some(Ok(Token::StartTag))),
-            '>' => (1, Some(Ok(Token::EndTag))),
-            '=' => (1, Some(Ok(Token::Equals))),
-            '"' => (1, Some(Ok(Token::QuotationMark))),
-            '?' => (1, Some(Ok(Token::QuestionMark))),
-            '/' => (1, Some(Ok(Token::Slash))),
-            char if char.is_whitespace() => (char.len_utf8(), Some(Ok(Token::Whitespace(char)))),
+            '<' => (1, Token::StartTag),
+            '>' => (1, Token::EndTag),
+            '=' => (1, Token::Equals),
+            '"' => (1, Token::QuotationMark),
+            '?' => (1, Token::QuestionMark),
+            '/' => (1, Token::Slash),
+            char if char.is_whitespace() => (char.len_utf8(), Token::Whitespace(char)),
             char => {
                 let mut word_length = char.len_utf8();
                 loop {
@@ -103,14 +105,14 @@ impl<T: Read> TokenisedXml<T> {
                 }
                 (
                     word_length,
-                    Some(Ok(Token::Word(String::from(
+                    Token::Word(String::from(
                         &self.buffer[self.byte_offset..self.byte_offset + word_length],
-                    )))),
+                    )),
                 )
             }
         };
         self.byte_offset += byte_length;
-        token
+        Some(Ok(token))
     }
 
     /// A value of `Ok(true)` means that there is definitely at least one character to read.
@@ -151,7 +153,7 @@ pub(super) enum Token {
 }
 
 impl Token {
-    pub(super) fn on_end_of_string(self, str: &mut String) {
+    pub(super) fn append_to(self, str: &mut String) {
         match self {
             Token::StartTag => str.push('<'),
             Token::EndTag => str.push('>'),
@@ -159,7 +161,7 @@ impl Token {
             Token::Slash => str.push('/'),
             Token::Equals => str.push('='),
             Token::QuotationMark => str.push('\"'),
-            Token::Word(word) => *str += word.as_str(),
+            Token::Word(word) => str.push_str(&word),
             Token::Whitespace(char) => str.push(char),
         };
     }
@@ -168,14 +170,14 @@ impl Token {
 impl std::fmt::Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::StartTag => write!(f, "Start tag: '<'"),
-            Token::EndTag => write!(f, "End tag: '>'"),
-            Token::QuestionMark => write!(f, "Question mark: '?'"),
-            Token::Slash => write!(f, "Slash: '/'"),
-            Token::Equals => write!(f, "Equals: '='"),
-            Token::QuotationMark => write!(f, "Quotation mark: '\"'"),
-            Token::Word(word) => write!(f, "Word: \"{word}\""),
-            Token::Whitespace(c) => write!(f, "Whitespace character: '{c}'"),
+            Token::StartTag => write!(f, "Start tag"),
+            Token::EndTag => write!(f, "End tag"),
+            Token::QuestionMark => write!(f, "Question mark"),
+            Token::Slash => write!(f, "Slash"),
+            Token::Equals => write!(f, "Equals"),
+            Token::QuotationMark => write!(f, "Quotation mark"),
+            Token::Word(word) => write!(f, "Word({word})"),
+            Token::Whitespace(c) => write!(f, "Whitespace character({c})"),
         }
     }
 }
@@ -187,15 +189,7 @@ mod tests {
 
     #[test]
     fn can_tokenise_xml_file() {
-        let mut tokens = tokenise_xml_file(Path::new(super::super::VULKAN_XML_PATH)).unwrap();
-        loop {
-            let token = tokens.next();
-            match token {
-                None => break,
-                Some(_) => (),
-            }
-        }
-        assert!(tokens.next().is_none())
+        for _ in tokenise_xml_file(Path::new(super::super::VULKAN_XML_PATH)).unwrap() {}
     }
 
     #[test]
@@ -283,7 +277,7 @@ mod tests {
         ];
         for test in data {
             let mut str = String::from(test.0);
-            test.1.on_end_of_string(&mut str);
+            test.1.append_to(&mut str);
             assert_eq!(str, test.2)
         }
     }
@@ -291,16 +285,16 @@ mod tests {
     #[test]
     fn test_token_debug() {
         let data = [
-            (Token::StartTag, "Start tag: '<'"),
-            (Token::EndTag, "End tag: '>'"),
-            (Token::QuestionMark, "Question mark: '?'"),
-            (Token::Slash, "Slash: '/'"),
-            (Token::Equals, "Equals: '='"),
-            (Token::QuotationMark, "Quotation mark: '\"'"),
-            (Token::Word(String::from("")), "Word: \"\""),
-            (Token::Word(String::from("Test")), "Word: \"Test\""),
-            (Token::Whitespace(' '), "Whitespace character: ' '"),
-            (Token::Whitespace('猫'), "Whitespace character: '猫'"),
+            (Token::StartTag, "Start tag"),
+            (Token::EndTag, "End tag"),
+            (Token::QuestionMark, "Question mark"),
+            (Token::Slash, "Slash"),
+            (Token::Equals, "Equals"),
+            (Token::QuotationMark, "Quotation mark"),
+            (Token::Word(String::from("")), "Word()"),
+            (Token::Word(String::from("Test")), "Word(Test)"),
+            (Token::Whitespace(' '), "Whitespace character( )"),
+            (Token::Whitespace('猫'), "Whitespace character(猫)"),
         ];
         for test in data {
             assert_eq!(test.0.to_string(), test.1);
