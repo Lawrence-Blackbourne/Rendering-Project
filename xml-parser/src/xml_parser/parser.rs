@@ -20,7 +20,7 @@ pub(super) fn parse_xml_file(file_path: impl AsRef<Path>) -> Result<ParsedXml<Fi
 }
 
 #[derive(Debug)]
-pub(super) struct ParsedXml<T: Read> {
+pub struct ParsedXml<T: Read> {
     tokens: TokenisedXml<T>,
     names: Vec<String>,
     state: State,
@@ -28,7 +28,7 @@ pub(super) struct ParsedXml<T: Read> {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum Item {
+pub enum Item {
     Element {
         name: String,
         attributes: Vec<(String, String)>,
@@ -124,7 +124,7 @@ impl<T: Read> FusedIterator for ParsedXml<T> {}
 impl<T: Read> ParsedXml<T> {
     /// Skips to the end of the element currently being looked at by the parser.
     /// If the parser is outside the root element, skips to the very end of the file.
-    pub(super) fn skip_current_element(&mut self) -> Result<(), ParserError> {
+    pub fn skip_current_element(&mut self) -> Result<(), ParserError> {
         let mut current_depth = 1;
         loop {
             match self.next() {
@@ -394,15 +394,12 @@ impl<T: Read> ParsedXml<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::{
-        VULKAN_XML_PATH,
-        tests::{PARSER_IO_ERROR_TEST_STRING, TestReader},
-    };
+    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TEST_XML_PATH, TestReader};
     use super::*;
 
     #[test]
     fn can_parse_text() {
-        let mut xml = parse_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
+        let mut xml = parse_xml_file(Path::new(TEST_XML_PATH)).unwrap();
         loop {
             let val = xml.next();
             if val.is_none() {

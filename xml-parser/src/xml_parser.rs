@@ -20,28 +20,20 @@
 mod parser;
 mod tokeniser;
 
-use parser::ParsedXml;
 use std::fs::File;
 use std::io;
 use std::path::Path;
 
-const VULKAN_XML_PATH: &str = "vulkan_XML/vk.xml";
+pub(super) use parser::{ParsedXml, Item};
 
-fn get_parsed_xml_file(path: impl AsRef<Path>) -> Result<ParsedXml<File>, ParserError> {
+/// Parses the XML found in a given file
+pub fn get_parsed_xml_file(path: impl AsRef<Path>) -> Result<ParsedXml<File>, ParserError> {
     parser::parse_xml_file(path)
-}
-
-/// This function is only here to stop the many many compiler warnings about the code being unused
-/// TODO remove once an actual use is implemented
-pub fn temp() {
-    let mut xml = get_parsed_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
-    while xml.next().is_some() {}
-    assert!(xml.next().is_none())
 }
 
 /// Describes what error occurred during the XML parsing
 #[derive(Debug)]
-enum ParserError {
+pub enum ParserError {
     FileCutShortAbruptlyDuringXMLDeclaration,
     FileCutShortAbruptlyDuringTag,
     NoRootElement,
@@ -117,9 +109,11 @@ mod tests {
     use super::*;
     use io::Read;
 
+    pub(super) const TEST_XML_PATH: &str = super::super::VULKAN_XML_PATH;
+
     #[test]
     fn can_parse_xml() {
-        let mut xml = get_parsed_xml_file(Path::new(VULKAN_XML_PATH)).unwrap();
+        let mut xml = get_parsed_xml_file(Path::new(TEST_XML_PATH)).unwrap();
         loop {
             let val = xml.next();
             if val.is_none() {
@@ -131,24 +125,24 @@ mod tests {
     }
 
     #[derive(Clone, Debug, PartialEq, Eq)]
-    pub(super) struct TestReader {
+    pub(crate) struct TestReader {
         data: io::Cursor<Vec<u8>>,
         fail: bool,
     }
 
     const TEST_READER_ERROR_STRING: &str = "Test";
-    pub(super) const PARSER_IO_ERROR_TEST_STRING: &str =
+    pub(crate) const PARSER_IO_ERROR_TEST_STRING: &str =
         "an io error occurred while reading the XML";
 
     impl TestReader {
-        pub(super) fn new(value: &str) -> Self {
+        pub(crate) fn new(value: &str) -> Self {
             Self {
                 data: io::Cursor::new(value.as_bytes().to_vec()),
                 fail: false,
             }
         }
 
-        pub(super) fn with_fail_on_end(mut self, value: bool) -> Self {
+        pub(crate) fn with_fail_on_end(mut self, value: bool) -> Self {
             self.fail = value;
             self
         }

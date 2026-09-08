@@ -431,6 +431,7 @@ impl From<vk::ImageUsageFlags> for ImageUsages {
 }
 
 /// A colour space that the values in the image format can be interpreted in.
+#[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum ColourSpace {
     /// The images are in sRGB colour space, encoded according to the sRGB specification.
@@ -514,8 +515,44 @@ impl TryFrom<vk::ColorSpaceKHR> for ColourSpace {
 /// An image format.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ImageFormat {
-    RegularFormat(RegularImageFormat),
+pub struct ImageFormat {
+    /// The underlying uk::Format
+    format: vk::Format,
+
+    /// The class of the format
+    format_class: FormatClass,
+
+    /// The size of the texel blocks in bytes
+    byte_block_size: u8,
+
+    /// The number of texels in a block
+    texels_per_block: u8,
+
+    /// The how the texels in the blocks are stored
+    texel_block_extent: (u8, u8, u8),
+
+    /// Stores if the data is packed or not.
+    /// On a packed data format, the data is stored in one big integer, and the first element in the
+    /// order takes the least significant bits, all the way to the most significant bits for the
+    /// last element.
+    /// On a non-packed data format, the data is stored in a byte array, with the first elements of
+    /// the order having the lower index bytes, and the later elements having the higher index.
+    /// Non-packed data formats are only available when each element takes an integer number of
+    /// bytes.
+    /// The distinction between the two possibilities matters when reading the true values stored in
+    /// RAM due to the endianness of systems.
+    /// Some formats have a number of bits not equal to a full number of bytes, and unused bits
+    /// after that to fill the gaps.
+    /// For these, if packed is true, then the group of bits with the unused ones at the end form an
+    /// unpacked word, and it is these words which are then packed
+    packed: Option<u8>,
+
+    /// How the texel is compressed.
+    /// A value of None means the texel is not compressed.
+    texture_compression_scheme: Option<FormatCompressionScheme>,
+
+
+    components: Vec<ImageFormatComponent>
 }
 
 impl TryFrom<vk::Format> for ImageFormat {
@@ -529,6 +566,8 @@ impl TryFrom<vk::Format> for ImageFormat {
     }
 }
 
+
+
 /// An enum used in the conversion from vk::SurfaceFormatKHR to Format.
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FormatConversionError {
@@ -536,9 +575,9 @@ pub enum FormatConversionError {
     ColourSpaceError(vk::ColorSpaceKHR),
 }
 
+
 /// An image format with some number (potentially 0) of bits in the red, green, blue, and alpha
 /// channels, with each pixel having its own data, packed into a bitstring.
-#[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct RegularImageFormat {
     /// The number of bits in the red channel.
@@ -562,20 +601,6 @@ pub struct RegularImageFormat {
     /// Stores if the data channels are signed or not.
     pub signed: bool,
 
-    /// Stores if the data is packed or not.
-    /// On a packed data format, the data is stored in one big integer, and the first element in the
-    /// order takes the least significant bits, all the way to the most significant bits for the
-    /// last element.
-    /// On a non-packed data format, the data is stored in a byte array, with the first elements of
-    /// the order having the lower index bytes, and the later elements having the higher index.
-    /// Non-packed data formats are only available when each element takes an integer number of
-    /// bytes.
-    /// The distinction between the two possibilities matters when reading the true values stored in
-    /// RAM due to the endianness of systems.
-    /// Some formats have a number of bits not equal to a full number of bytes, and unused bits
-    /// after that to fill the gaps.
-    /// For these, if packed is true, then the group of bits with the unused ones at the end form an
-    /// unpacked word, and it is these words which are then packed
     pub packed: Option<u8>,
 
     /// Stores the order that the data is packed into the bitstring in.

@@ -141,7 +141,7 @@ impl<T: Read> TokenisedXml<T> {
 
 /// Describes a single token found in the XML stream.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) enum Token {
+pub enum Token {
     StartTag,
     EndTag,
     QuestionMark,
@@ -153,7 +153,7 @@ pub(super) enum Token {
 }
 
 impl Token {
-    pub(super) fn append_to(self, str: &mut String) {
+    pub fn append_to(self, str: &mut String) {
         match self {
             Token::StartTag => str.push('<'),
             Token::EndTag => str.push('>'),
@@ -184,12 +184,12 @@ impl std::fmt::Display for Token {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TestReader};
+    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TEST_XML_PATH, TestReader};
     use super::*;
 
     #[test]
     fn can_tokenise_xml_file() {
-        for _ in tokenise_xml_file(Path::new(super::super::VULKAN_XML_PATH)).unwrap() {}
+        for _ in tokenise_xml_file(Path::new(TEST_XML_PATH)).unwrap() {}
     }
 
     #[test]

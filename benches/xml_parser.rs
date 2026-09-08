@@ -1,5 +1,5 @@
 use criterion::{Criterion, criterion_group, criterion_main};
-use rendering_project::xml_parser;
+use rendering_project::build_script_xml_parser::xml_parser;
 
 #[cfg(feature = "bench")]
 fn criterion_benchmark(c: &mut Criterion) {
