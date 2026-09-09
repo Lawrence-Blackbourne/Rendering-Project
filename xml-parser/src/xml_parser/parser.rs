@@ -394,12 +394,12 @@ impl<T: Read> ParsedXml<T> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TEST_XML_PATH, TestReader};
+    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TestReader};
     use super::*;
 
     #[test]
     fn can_parse_text() {
-        let mut xml = parse_xml_file(Path::new(TEST_XML_PATH)).unwrap();
+        let mut xml = parse_xml_file(Path::new(crate::tests::TEST_XML_PATH)).unwrap();
         loop {
             let val = xml.next();
             if val.is_none() {

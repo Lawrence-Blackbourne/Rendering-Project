@@ -1,10 +1,11 @@
+[workspace]
+members = [".", "xml-parser"]
+default-members = [".", "xml-parser"]
+
 [package]
 name = "rendering-project"
 version = "0.1.0"
 edition = "2024"
-
-[build-dependencies]
-xml-parser = {path = "xml-parser"}
 
 [dependencies]
 ash = { version = "0.38.0", features = ["linked"]}

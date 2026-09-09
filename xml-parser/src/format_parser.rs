@@ -5,19 +5,15 @@ use ash::vk;
 
 pub type ParsedFormats = Vec<ParsedFormat>;
 
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct ParsedFormat {}
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct ParsedFormat {
-    format: vk::Format,
-
-    channels: Vec::
-}
-
+#[derive(Clone, Debug, Eq, PartialEq)]
 struct FormatAttributeInfo {
     name: String,
 }
 
-pub(super) fn parse_formats<T: Read>(xml: &mut ParsedXml<T>) -> ParsedFormats {
+pub fn parse_formats<T: Read>(xml: &mut ParsedXml<T>) -> ParsedFormats {
     let formats = Vec::new();
     loop {
         match xml.next() {
@@ -40,6 +36,5 @@ pub(super) fn parse_formats<T: Read>(xml: &mut ParsedXml<T>) -> ParsedFormats {
 }
 
 fn get_format_attribute_info(attributes: Vec<(String, String)>) -> FormatAttributeInfo {
-
-    FormatAttributeInfo{}
+    todo!()
 }

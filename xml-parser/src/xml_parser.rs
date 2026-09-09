@@ -16,7 +16,6 @@
 //!
 //! Performance wise, we can tokenise and parse the entirety of vk.xml in a benchmarked 45.025ms,
 //! which is more than fast enough for code used only in the build script
-
 mod parser;
 mod tokeniser;
 
@@ -109,11 +108,9 @@ mod tests {
     use super::*;
     use io::Read;
 
-    pub(super) const TEST_XML_PATH: &str = super::super::VULKAN_XML_PATH;
-
     #[test]
     fn can_parse_xml() {
-        let mut xml = get_parsed_xml_file(Path::new(TEST_XML_PATH)).unwrap();
+        let mut xml = get_parsed_xml_file(Path::new(crate::tests::TEST_XML_PATH)).unwrap();
         loop {
             let val = xml.next();
             if val.is_none() {

@@ -184,12 +184,12 @@ impl std::fmt::Display for Token {
 
 #[cfg(test)]
 mod tests {
-    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TEST_XML_PATH, TestReader};
+    use super::super::tests::{PARSER_IO_ERROR_TEST_STRING, TestReader};
     use super::*;
 
     #[test]
     fn can_tokenise_xml_file() {
-        for _ in tokenise_xml_file(Path::new(TEST_XML_PATH)).unwrap() {}
+        for _ in tokenise_xml_file(Path::new(crate::tests::TEST_XML_PATH)).unwrap() {}
     }
 
     #[test]

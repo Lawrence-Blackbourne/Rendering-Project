@@ -1,10 +1,8 @@
-mod format_parser;
 mod xml_parser;
+mod format_parser;
 
 use std::path::Path;
 use xml_parser::Item;
-
-const VULKAN_XML_PATH: &str = "vulkan_XML/vk.xml";
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedXml {
@@ -12,7 +10,7 @@ pub struct ParsedXml {
 }
 
 fn parse_xml(text: impl AsRef<Path>) -> ParsedXml {
-    let mut xml = xml_parser::get_parsed_xml_file(VULKAN_XML_PATH).unwrap();
+    let mut xml = xml_parser::get_parsed_xml_file(text).unwrap();
     xml.next();
     loop {
         match xml.next() {
@@ -30,14 +28,11 @@ fn parse_xml(text: impl AsRef<Path>) -> ParsedXml {
             Some(Err(e)) => panic!("{e:?}"),
             None => panic!("The XML file ended without the required sections for the build script")
         }
-        if let Some(Ok(xml_parser::Item::Element{
-            name,
-            ..
-        })) = xml.next() && name == String::from("formats") {
-            return ParsedXml{
-                parsed_formats: format_parser::parse_formats(&mut xml)
-            };
-        }
     }
     panic!()
+}
+
+#[cfg(test)]
+mod tests {
+    pub(crate) const TEST_XML_PATH: &str = "vulkan_XML/vk.xml";
 }

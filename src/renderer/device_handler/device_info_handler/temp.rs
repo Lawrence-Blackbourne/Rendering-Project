@@ -1,4 +1,4 @@
-use super::RegularImageFormatConversion::{self, Float, Int, Norm, SRGB, Scaled};
+/*use super::RegularImageFormatConversion::{self, Float, Int, Norm, SRGB, Scaled};
 use super::RegularImageFormatOrder::{
     self, ABGR, ARGB, BGR, BGRA, D, R, RG, RGB, RGBA, RX, RXGX, RXGXBXAX,
 };
@@ -219,3 +219,4 @@ pub(super) const REGULAR_IMAGE_FORMAT_CONVERSION_DATA: &[(
         Norm,
     ),
 ];
+*/
