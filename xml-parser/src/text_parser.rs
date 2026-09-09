@@ -94,13 +94,15 @@ impl std::error::Error for ParserError {
 }
 
 #[cfg(feature = "bench")]
+#[doc(hidden)]
 pub fn benchmark_tokeniser() {
-    for _ in tokeniser::tokenise_xml_file(Path::new(VULKAN_XML_PATH)).unwrap() {}
+    for _ in tokeniser::tokenise_xml_file(Path::new(crate::BENCH_XML_PATH)).unwrap() {}
 }
 
 #[cfg(feature = "bench")]
+#[doc(hidden)]
 pub fn benchmark_parser() {
-    for _ in parser::parse_xml_file(Path::new(VULKAN_XML_PATH)).unwrap() {}
+    for _ in parser::parse_xml_file(Path::new(crate::BENCH_XML_PATH)).unwrap() {}
 }
 
 #[cfg(test)]
@@ -110,7 +112,7 @@ mod tests {
 
     #[test]
     fn can_parse_xml() {
-        let mut xml = get_parsed_xml_file(Path::new(crate::tests::TEST_XML_PATH)).unwrap();
+        let mut xml = get_parsed_xml_file(Path::new(crate::TEST_XML_PATH)).unwrap();
         loop {
             let val = xml.next();
             if val.is_none() {

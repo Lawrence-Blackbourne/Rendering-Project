@@ -399,7 +399,7 @@ mod tests {
 
     #[test]
     fn can_parse_text() {
-        let mut xml = parse_xml_file(Path::new(crate::tests::TEST_XML_PATH)).unwrap();
+        let mut xml = parse_xml_file(Path::new(crate::TEST_XML_PATH)).unwrap();
         loop {
             let val = xml.next();
             if val.is_none() {

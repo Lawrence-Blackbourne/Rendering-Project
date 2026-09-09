@@ -4,4 +4,21 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-ash = { version = "0.38.0", features = ["linked"]}
+ash = { workspace = true }
+criterion = { workspace = true, optional = true }
+
+[lib]
+bench = false
+
+[[bin]]
+name = "xml-parser"
+path = "src/main.rs"
+bench = false
+
+[features]
+bench = ["dep:criterion"]
+
+[[bench]]
+name = "xml_parser"
+harness = false
+required-features = ["bench"]

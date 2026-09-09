@@ -7,10 +7,23 @@ name = "rendering-project"
 version = "0.1.0"
 edition = "2024"
 
-[dependencies]
+[workspace.dependencies]
 ash = { version = "0.38.0", features = ["linked"]}
 glfw = "0.62.0"
-criterion = { version = "0.8.2", optional = true }
+criterion = "0.8.2"
+
+[dependencies]
+ash = { workspace = true }
+glfw = { workspace = true }
+criterion = { workspace = true, optional = true }
+
+[lib]
+bench = false
+
+[[bin]]
+name = "rendering-project"
+path = "src/main.rs"
+bench = false
 
 [features]
 bench = ["dep:criterion"]
@@ -19,6 +32,6 @@ bench = ["dep:criterion"]
 debug = true
 
 [[bench]]
-name = "xml_parser"
+name = "test"
 harness = false
 required-features = ["bench"]

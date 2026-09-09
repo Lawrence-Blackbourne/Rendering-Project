@@ -189,7 +189,7 @@ mod tests {
 
     #[test]
     fn can_tokenise_xml_file() {
-        for _ in tokenise_xml_file(Path::new(crate::tests::TEST_XML_PATH)).unwrap() {}
+        for _ in tokenise_xml_file(Path::new(crate::TEST_XML_PATH)).unwrap() {}
     }
 
     #[test]

@@ -1,4 +1,4 @@
-use super::xml_parser::{ParsedXml, Item};
+use super::text_parser::{ParsedXml, Item};
 
 use std::io::Read;
 use ash::vk;

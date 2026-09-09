@@ -1,8 +1,8 @@
-mod xml_parser;
+pub mod text_parser;
 mod format_parser;
 
 use std::path::Path;
-use xml_parser::Item;
+use text_parser::Item;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ParsedXml {
@@ -10,7 +10,7 @@ pub struct ParsedXml {
 }
 
 fn parse_xml(text: impl AsRef<Path>) -> ParsedXml {
-    let mut xml = xml_parser::get_parsed_xml_file(text).unwrap();
+    let mut xml = text_parser::get_parsed_xml_file(text).unwrap();
     xml.next();
     loop {
         match xml.next() {
@@ -32,7 +32,10 @@ fn parse_xml(text: impl AsRef<Path>) -> ParsedXml {
     panic!()
 }
 
+
+
 #[cfg(test)]
-mod tests {
-    pub(crate) const TEST_XML_PATH: &str = "vulkan_XML/vk.xml";
-}
+const TEST_XML_PATH: &str = "vulkan_XML/vk.xml";
+
+#[cfg(feature = "bench")]
+const BENCH_XML_PATH: &str = "vulkan_XML/vk.xml";
