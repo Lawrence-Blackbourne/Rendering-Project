@@ -23,7 +23,7 @@ use std::fs::File;
 use std::io;
 use std::path::Path;
 
-pub(super) use parser::{ParsedXml, Item};
+pub(super) use parser::{Item, ParsedXml};
 
 /// Parses the XML found in a given file
 pub fn get_parsed_xml_file(path: impl AsRef<Path>) -> Result<ParsedXml<File>, ParserError> {

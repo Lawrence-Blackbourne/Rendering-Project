@@ -166,7 +166,7 @@ impl<T: Read> ParsedXml<T> {
                         found_ending_question_mark: false,
                     };
                     None
-                },
+                }
                 Word(name) => {
                     self.state = Element {
                         name,
@@ -176,7 +176,7 @@ impl<T: Read> ParsedXml<T> {
                         current_attribute_value: String::new(),
                     };
                     None
-                },
+                }
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
 
@@ -189,7 +189,7 @@ impl<T: Read> ParsedXml<T> {
                     };
                 }
                 None
-            },
+            }
             Declaration {
                 found_ending_question_mark,
             } => match token {
@@ -199,12 +199,12 @@ impl<T: Read> ParsedXml<T> {
                         found_start_tag: false,
                     };
                     None
-                },
+                }
                 QuestionMark => None,
                 _ => {
                     *found_ending_question_mark = false;
                     None
-                },
+                }
             },
 
             StartTagFound => match token {
@@ -227,7 +227,7 @@ impl<T: Read> ParsedXml<T> {
                         name_checked: false,
                     };
                     None
-                },
+                }
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
 
@@ -244,25 +244,19 @@ impl<T: Read> ParsedXml<T> {
                     let name = std::mem::take(name);
                     let attributes = std::mem::take(attributes);
                     self.state = Neutral;
-                    Some(Ok(Item::Element {
-                        name,
-                        attributes,
-                    }))
-                },
+                    Some(Ok(Item::Element { name, attributes }))
+                }
                 Word(attribute_name) => {
                     *stage = ElementStage::ExpectingEquals;
                     *current_attribute_name = attribute_name;
                     None
-                },
+                }
                 Slash => {
                     let name = std::mem::take(name);
                     let attributes = std::mem::take(attributes);
                     self.state = SelfClosingElement;
-                    Some(Ok(Item::Element {
-                        name,
-                        attributes,
-                    }))
-                },
+                    Some(Ok(Item::Element { name, attributes }))
+                }
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
             Element {
@@ -272,7 +266,7 @@ impl<T: Read> ParsedXml<T> {
                 Equals => {
                     *stage = ElementStage::ExpectingQuotationMark;
                     None
-                },
+                }
                 Whitespace(_) => None,
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
@@ -283,7 +277,7 @@ impl<T: Read> ParsedXml<T> {
                 QuotationMark => {
                     *stage = ElementStage::ReadingAttributeValue;
                     None
-                },
+                }
                 Whitespace(_) => None,
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
@@ -306,14 +300,14 @@ impl<T: Read> ParsedXml<T> {
                 t => {
                     t.append_to(current_attribute_value);
                     None
-                },
+                }
             },
 
             Neutral => match token {
                 StartTag => {
                     self.state = StartTagFound;
                     None
-                },
+                }
                 t => {
                     let mut text = String::new();
                     t.append_to(&mut text);
@@ -327,18 +321,18 @@ impl<T: Read> ParsedXml<T> {
                     let text = std::mem::take(text);
                     self.state = StartTagFound;
                     Some(Ok(Item::Text(text)))
-                },
+                }
                 t => {
                     t.append_to(text);
                     None
-                },
+                }
             },
 
             SelfClosingElement => match token {
                 EndTag => {
                     self.state = Neutral;
                     Some(Ok(Item::EndCurrentElement))
-                },
+                }
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
 
@@ -347,14 +341,14 @@ impl<T: Read> ParsedXml<T> {
             } => match token {
                 Word(name) => match self.names.pop() {
                     Some(expected) if expected == name => {
-                        self.state = ClosingElement {name_checked: true};
+                        self.state = ClosingElement { name_checked: true };
                         None
                     }
                     Some(expected) => Some(Err(ParserError::ElementsClosedOutOfOrder {
                         correct: expected,
                         found: name,
                     })),
-                    None => Some(Err(ParserError::ElementClosedAfterRootElementClosed(name)))
+                    None => Some(Err(ParserError::ElementClosedAfterRootElementClosed(name))),
                 },
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
@@ -362,7 +356,7 @@ impl<T: Read> ParsedXml<T> {
                 EndTag => {
                     self.state = Neutral;
                     Some(Ok(Item::EndCurrentElement))
-                },
+                }
                 Whitespace(_) => None,
                 t => Some(Err(ParserError::InvalidToken(t))),
             },
@@ -430,7 +424,10 @@ mod tests {
             ("\n\t \"", ParserError::InvalidToken(QuotationMark)),
             ("?", ParserError::InvalidToken(QuestionMark)),
             ("<?", ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
-            ("<????test?", ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
+            (
+                "<????test?",
+                ParserError::FileCutShortAbruptlyDuringXMLDeclaration,
+            ),
         ];
         for test in data {
             assert_eq!(
@@ -658,17 +655,29 @@ mod tests {
             check_xml_gives_correct_values(test.0, Vec::new(), Some(test.1));
         }
         let data2 = [
-            ("<element></?element ?", ParserError::InvalidToken(QuestionMark)),
+            (
+                "<element></?element ?",
+                ParserError::InvalidToken(QuestionMark),
+            ),
             ("<element/<", ParserError::InvalidToken(StartTag)),
             ("<element/=", ParserError::InvalidToken(Equals)),
             ("<element//", ParserError::InvalidToken(Slash)),
             ("<element/\"", ParserError::InvalidToken(QuotationMark)),
             ("<element/ ", ParserError::InvalidToken(Whitespace(' '))),
-            ("<element/test", ParserError::InvalidToken(Word(String::from("test")))),
-            ("<element/ attribute=\"value\"", ParserError::InvalidToken(Whitespace(' '))),
+            (
+                "<element/test",
+                ParserError::InvalidToken(Word(String::from("test"))),
+            ),
+            (
+                "<element/ attribute=\"value\"",
+                ParserError::InvalidToken(Whitespace(' ')),
+            ),
             ("<element><?", ParserError::InvalidToken(QuestionMark)),
             ("<element></?", ParserError::InvalidToken(QuestionMark)),
-            ("<element></element ?", ParserError::InvalidToken(QuestionMark)),
+            (
+                "<element></element ?",
+                ParserError::InvalidToken(QuestionMark),
+            ),
             ("<element><", ParserError::FileCutShortAbruptlyDuringTag),
             ("<element></", ParserError::FileCutShortAbruptlyDuringTag),
         ];
@@ -683,11 +692,26 @@ mod tests {
             );
         }
         let data3 = [
-            ("<element attribute=\"value\"/", ParserError::FileCutShortAbruptlyDuringTag),
-            ("<element attribute=\"value\"/=", ParserError::InvalidToken(Equals)),
-            ("<??><element attribute=\"value\"/\"", ParserError::InvalidToken(QuotationMark)),
-            ("<element attribute=\"value\"/<", ParserError::InvalidToken(StartTag)),
-            ("<element attribute=\"value\"/?", ParserError::InvalidToken(QuestionMark)),
+            (
+                "<element attribute=\"value\"/",
+                ParserError::FileCutShortAbruptlyDuringTag,
+            ),
+            (
+                "<element attribute=\"value\"/=",
+                ParserError::InvalidToken(Equals),
+            ),
+            (
+                "<??><element attribute=\"value\"/\"",
+                ParserError::InvalidToken(QuotationMark),
+            ),
+            (
+                "<element attribute=\"value\"/<",
+                ParserError::InvalidToken(StartTag),
+            ),
+            (
+                "<element attribute=\"value\"/?",
+                ParserError::InvalidToken(QuestionMark),
+            ),
         ];
         for test in data3 {
             check_xml_gives_correct_values(

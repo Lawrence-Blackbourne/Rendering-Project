@@ -11,7 +11,7 @@ use std::iter::FusedIterator;
 use std::path::Path;
 
 pub(super) fn tokenise_xml_file(
-    file_path: impl AsRef<Path>
+    file_path: impl AsRef<Path>,
 ) -> Result<TokenisedXml<File>, ParserError> {
     Ok(TokenisedXml::new(File::open(file_path)?))
 }

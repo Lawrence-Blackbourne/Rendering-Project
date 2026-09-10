@@ -2,9 +2,7 @@ use criterion::{Criterion, criterion_group, criterion_main};
 
 #[cfg(feature = "bench")]
 fn criterion_benchmark(c: &mut Criterion) {
-    c.bench_function("dummy", |b| {
-        b.iter(|| ())
-    });
+    c.bench_function("dummy", |b| b.iter(|| ()));
 }
 
 #[cfg(feature = "bench")]

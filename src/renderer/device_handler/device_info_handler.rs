@@ -592,20 +592,6 @@ pub enum FormatConversionError {
     ColourSpaceError(vk::ColorSpaceKHR),
 }
 
-/// The class of the image format.
-/// Similar formats may share a class.
-#[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ImageFormatClass {
-
-}
-
-/// The compression scheme used in the format
-#[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ImageFormatCompressionScheme {
-
-}
 
 /// A component of the format representing a channel and how the data in that channel is converted
 /// when passed to a shader.
@@ -620,9 +606,7 @@ pub struct ImageFormatComponent {
 /// A plane within the block.
 #[non_exhaustive]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub struct ImageFormatPlane {
-
-}
+pub struct ImageFormatPlane {}
 
 /// The different options for what a channel can represent.
 #[non_exhaustive]
