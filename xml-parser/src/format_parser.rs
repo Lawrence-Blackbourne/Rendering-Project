@@ -1,30 +1,40 @@
 use super::text_parser::{Item, ParsedXml};
+use crate::generator_structures::format_generator_enums::{ImageFormatClass,
+                                                          ImageFormatCompressionScheme};
 
 use std::io::Read;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct ParsedFormat {
     pub attributes: FormatAttributeInfo,
     pub components: Vec<FormatComponentInfo>,
     pub planes: Vec<FormatPlaneInfo>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FormatAttributeInfo {
     name: String,
-    class: String,
+    class: ImageFormatClass,
     block_size: String,
     texels_per_block: String,
     block_extent: (String, String, String),
     packed: Option<String>,
-    compressed: Option<String>,
-    chroma: Option<String>,
+    compressed: Option<ImageFormatCompressionScheme>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct FormatComponentInfo {}
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct FormatElementInfo {
+    components: Vec<FormatComponentInfo>,
+    planes: Vec<FormatPlaneInfo>,
+}
 
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Debug, Clone, Eq, PartialEq)]
+pub struct FormatComponentInfo {
+    name: String,
+    bits: u8,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq)]
 pub struct FormatPlaneInfo {}
 
 pub fn parse_formats<T: Read>(xml: &mut ParsedXml<T>, vec: &mut Vec<ParsedFormat>) {
@@ -32,6 +42,7 @@ pub fn parse_formats<T: Read>(xml: &mut ParsedXml<T>, vec: &mut Vec<ParsedFormat
         match xml.next() {
             Some(Ok(Item::Element { name, attributes })) if name == String::from("format") => {
                 let attribute_info = get_format_attribute_info(attributes);
+                let element_info = get_format_element_info(xml);
                 panic!()
             }
             Some(Ok(Item::Element { .. })) => {
@@ -46,39 +57,61 @@ pub fn parse_formats<T: Read>(xml: &mut ParsedXml<T>, vec: &mut Vec<ParsedFormat
 }
 
 fn get_format_attribute_info(attributes: Vec<(String, String)>) -> FormatAttributeInfo {
-    let mut attribute_info = FormatAttributeInfo {
-        name: String::new(),
-        class: String::new(),
-        block_size: String::new(),
-        texels_per_block: String::new(),
-        block_extent: (String::from("1"), String::from("1"), String::from("1")),
-        packed: None,
-        compressed: None,
-        chroma: None,
-    };
+    let mut name = None;
+    let mut class = None;
+    let mut block_size = None;
+    let mut texels_per_block = None;
+    let mut block_extent = (String::from("1"), String::from("1"), String::from("1"));
+    let mut packed = None;
+    let mut compressed = None;
     for attribute in attributes {
         match attribute.0.as_str() {
-            "name" => attribute_info.name = attribute.1,
-            "class" => attribute_info.class = to_class(attribute.1),
-            "blockSize" => attribute_info.block_size = attribute.1,
-            "texels_per_block" => attribute_info.texels_per_block = attribute.1,
-            "block_extent" => attribute_info.block_extent = to_block_extent(attribute.1),
-            "packed" => attribute_info.packed = Some(attribute.1),
-            "compressed" => attribute_info.compressed = Some(to_compression(attribute.1)),
-            "chroma" => attribute_info.chroma = Some(to_chroma(attribute.1)),
+            "name" => name = Some(attribute.1),
+            "class" => class = Some(ImageFormatClass::try_from(attribute.1.as_str()).unwrap()),
+            "blockSize" => block_size = Some(attribute.1),
+            "texels_per_block" => texels_per_block = Some(attribute.1),
+            "block_extent" => block_extent = to_block_extent(attribute.1),
+            "packed" => packed = Some(attribute.1),
+            "compressed" => compressed = Some(
+                ImageFormatCompressionScheme::try_from(attribute.1.as_str()).unwrap()
+            ),
             other => panic!(
                 "Unexpected \"{other}\" attribute found with value \"{}\"",
                 attribute.1
             ),
         }
     }
-    attribute_info
+    FormatAttributeInfo {
+        name: name.unwrap(),
+        class: class.unwrap(),
+        block_size: block_size.unwrap(),
+        texels_per_block: texels_per_block.unwrap(),
+        block_extent,
+        packed,
+        compressed,
+    }
 }
 
-fn to_class(txt: String) -> String {
-    //TODO figure out how to sync with the relevant enums
-    match txt {
-        other => panic!("Unknown class \"{other}\" found"),
+fn get_format_element_info<T: Read>(xml: &mut ParsedXml<T>) -> FormatElementInfo {
+    let mut elements = FormatElementInfo {
+        components: Vec::new(),
+        planes: Vec::new(),
+    };
+    loop {
+        match xml.next().unwrap().unwrap() {
+            Item::Element{ name, attributes } => {
+                if name.as_str() == "component" {
+                    elements.components.push(get_format_component_info(attributes));
+                } else if name.as_str() == "plane" {
+                    elements.planes.push(get_format_plane_info(attributes));
+                } else if !(name.as_str() == "spirvimageformat") {
+                    panic!("Unknown element found with name \"{name}\"")
+                }
+                assert_eq!(xml.next().unwrap().unwrap(), Item::EndCurrentElement)
+            }
+            Item::Text(txt) => panic!("Unexpected text element found: \"{txt}\""),
+            Item::EndCurrentElement => return elements,
+        }
     }
 }
 
@@ -96,14 +129,10 @@ fn to_block_extent(txt: String) -> (String, String, String) {
     result
 }
 
-fn to_compression(txt: String) -> String {
-    match txt {
-        other => panic!("Unknown compression \"{other}\" found"),
-    }
+fn get_format_component_info(attributes: Vec<(String, String)>) -> FormatComponentInfo {
+    let name = None
 }
 
-fn to_chroma(txt: String) -> String {
-    match txt {
-        other => panic!("Unknown chroma \"{other}\" found"),
-    }
+fn get_format_plane_info(attributes: Vec<(String, String)>) -> FormatPlaneInfo {
+    todo!()
 }

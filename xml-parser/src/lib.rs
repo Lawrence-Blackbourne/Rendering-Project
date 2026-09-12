@@ -1,5 +1,5 @@
 mod format_parser;
-mod generated_enums;
+mod generator_structures;
 pub mod text_parser;
 
 use std::path::Path;
@@ -23,7 +23,7 @@ pub fn parse_xml(text: impl AsRef<Path>) -> ParsedXml {
     loop {
         match xml.next() {
             Some(Ok(Item::Text(_))) => (),
-            Some(Ok(Item::Element { name, .. })) if name == String::from("registry") => {
+            Some(Ok(Item::Element { name, .. })) if name.as_str() == "registry" => {
                 break;
             }
             item => panic!("Invalid {item:?} item found"),
@@ -32,7 +32,7 @@ pub fn parse_xml(text: impl AsRef<Path>) -> ParsedXml {
     let mut parsed_xml = ParsedXml::new();
     loop {
         match xml.next() {
-            Some(Ok(Item::Element { name, .. })) if name == String::from("formats") => {
+            Some(Ok(Item::Element { name, .. })) if name.as_str() == "formats" => {
                 format_parser::parse_formats(&mut xml, &mut parsed_xml.formats);
             }
             Some(Ok(Item::Element { .. })) => xml.skip_current_element().unwrap(),

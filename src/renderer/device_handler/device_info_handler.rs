@@ -2,13 +2,15 @@
 //! receives into useful information for the library user.
 //! The module also contains structs helpful for setting up the device.
 mod temp;
+mod generated_structs;
 
+use generated_structs::{ImageFormatClass, ImageFormatCompressionScheme};
 use crate::renderer::Size2D;
 use ash::vk;
 
 /// A struct holding a potential physical device in a way that is easily usable.
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PhysicalDevice {
     /// The information about what this device can be used for
     pub device_info: DeviceInfo,
@@ -16,7 +18,7 @@ pub struct PhysicalDevice {
 }
 
 /// This stores the details about what surface information is supported.
-#[derive(Clone, Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct VulkanDisplayInfo {
     pub capabilities: vk::SurfaceCapabilitiesKHR,
     pub formats: Vec<vk::SurfaceFormatKHR>,
@@ -25,7 +27,7 @@ pub(crate) struct VulkanDisplayInfo {
 
 /// The info about a specific device, including the capabilities of the device, the formats that the
 /// rendering can be done in, and the presentation modes available.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DeviceInfo {
     /// The capabilities of the device.
     pub capabilities: Capabilities,
@@ -59,7 +61,7 @@ impl TryFrom<&VulkanDisplayInfo> for DeviceInfo {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TryIntoDeviceInfoError {
     CapabilitiesConversionError(TryIntoCapabilitiesError),
 }
@@ -80,7 +82,7 @@ impl From<TryIntoCapabilitiesError> for TryIntoDeviceInfoError {
 ///     .with_num_swap_frames(device_info.capabilities.min_swapchain_image_count);
 /// ```
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LogicalDeviceSettings {
     pub(crate) physical_device: PhysicalDevice,
     pub(crate) num_swap_frames: u8,
@@ -111,7 +113,7 @@ impl LogicalDeviceSettings {
 }
 
 /// What capabilities a physical device has.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Capabilities {
     /// The minimum number of images that can be in the swapchain.
     pub min_swapchain_image_count: u32,
@@ -218,7 +220,7 @@ impl TryFrom<vk::SurfaceCapabilitiesKHR> for Capabilities {
 }
 
 /// An image format and colour space pair.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Format {
     /// The format that the image will use.
     pub image_format: ImageFormat,
@@ -245,7 +247,7 @@ impl TryFrom<&vk::SurfaceFormatKHR> for Format {
 /// A way that the swapchain images are presented to the screen
 /// The only option that is required to be supported is FIFO.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum PresentationMode {
     /// When a new image is ready, it is presented immediately, and does not wait for the vertical
     /// blanking period to update, which may result in visible tearing.
@@ -297,7 +299,7 @@ impl TryFrom<vk::PresentModeKHR> for PresentationMode {
 
 /// Gives the error that occurred when converting vk::SurfaceCapabilities to Capabilities.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum TryIntoCapabilitiesError {
     FailedToConvertSupportedTransformations,
     FailedToConvertCurrentTransformations,
@@ -312,7 +314,7 @@ pub enum TryIntoCapabilitiesError {
 /// Stores transformations of the image.
 /// At least one option will always be true.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ImageTransformations {
     /// This transformation does nothing to the image.
     pub identity: bool,
@@ -382,7 +384,7 @@ impl TryFrom<vk::SurfaceTransformFlagsKHR> for ImageTransformations {
 /// potentially inherit depending on the specific system).
 /// At least one option will always be true.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct AlphaCompositingModes {
     /// The alpha is ignored, and the image is treated as a constant alpha of 1.
     pub opaque: bool,
@@ -419,7 +421,7 @@ impl TryFrom<vk::CompositeAlphaFlagsKHR> for AlphaCompositingModes {
 
 /// Specifies how an image is used.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ImageUsages {}
 
 impl From<vk::ImageUsageFlags> for ImageUsages {
@@ -430,7 +432,7 @@ impl From<vk::ImageUsageFlags> for ImageUsages {
 
 /// A colour space that the values in the image format can be interpreted in.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum ColourSpace {
     /// The images are in sRGB colour space, encoded according to the sRGB specification.
     NonLinearSRGB,
@@ -512,7 +514,7 @@ impl TryFrom<vk::ColorSpaceKHR> for ColourSpace {
 
 /// An image format.
 #[non_exhaustive]
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ImageFormat {
     /// The underlying uk::Format
     format: vk::Format,
@@ -544,10 +546,6 @@ pub struct ImageFormat {
     /// For these, if packed is true, then the group of bits with the unused ones at the end form an
     /// unpacked word, and it is these words which are then packed
     packed: Option<u8>,
-
-    /// How the texel is compressed.
-    /// A value of None means the texel is not compressed.
-    texture_compression_scheme: Option<ImageFormatCompressionScheme>,
 
     /// The list of colour components of the block.
     /// The order that they are in describes the order of the components in memory.
@@ -586,7 +584,7 @@ impl TryFrom<vk::Format> for ImageFormat {
 }
 
 /// An enum used in the conversion from vk::SurfaceFormatKHR to Format.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum FormatConversionError {
     ImageFormatError(vk::Format),
     ColourSpaceError(vk::ColorSpaceKHR),
@@ -596,52 +594,17 @@ pub enum FormatConversionError {
 /// A component of the format representing a channel and how the data in that channel is converted
 /// when passed to a shader.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ImageFormatComponent {
     name: ImageFormatChannel,
-    signed: bool,
+    stored: ImageFormatChannelStorage,
     conversion: ImageFormatComponentConversion,
 }
 
 /// A plane within the block.
 #[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ImageFormatPlane {}
-
-/// The different options for what a channel can represent.
-#[non_exhaustive]
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ImageFormatChannel {
-    Red,
-    Green,
-    Blue,
-    Alpha,
-    Depth,
-    Unused,
-}
-
-/// This describes how the data gets converted when passed to the shader.
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum ImageFormatComponentConversion {
-    /// The data is stored as an integer given to the shaders as an integer directly.
-    Int,
-
-    /// The data is stored as an integer, and cast as a float, the value of which is equal to the
-    /// value of the integer stored when passed to the shader.
-    Scaled,
-
-    /// The data is stored as an integer and cast as a float when passed to the shader.
-    /// The value of the cast float is normalized to between 0 and 1 inclusively for an unsigned
-    /// data type, and between -1 and 1 for a signed data type.
-    Norm,
-
-    /// The data is stored directly as a float type, and is passed as such to the shader.
-    Float,
-
-    /// The values are interpreted using sRGB non-linear encoding.
-    /// Data with this type is always unsigned.
-    SRGB,
-}
 
 //TODO fix
 /*
