@@ -15,9 +15,8 @@ pub struct ParsedFormat {
 pub struct FormatAttributeInfo {
     name: String,
     class: ImageFormatClass,
-    block_size: String,
-    texels_per_block: String,
-    block_extent: (String, String, String),
+    block_size: u8,
+    block_extent: (u8, u8, u8),
     packed: Option<String>,
     compressed: Option<ImageFormatCompressionScheme>,
 }
@@ -61,7 +60,7 @@ fn get_format_attribute_info(attributes: Vec<(String, String)>) -> FormatAttribu
     let mut class = None;
     let mut block_size = None;
     let mut texels_per_block = None;
-    let mut block_extent = (String::from("1"), String::from("1"), String::from("1"));
+    let mut block_extent = (1, 1, 1);
     let mut packed = None;
     let mut compressed = None;
     for attribute in attributes {
@@ -81,11 +80,11 @@ fn get_format_attribute_info(attributes: Vec<(String, String)>) -> FormatAttribu
             ),
         }
     }
+    assert_eq!(texels_per_block, block_extent.0 * block_extent.1 * block_extent.2);
     FormatAttributeInfo {
         name: name.unwrap(),
         class: class.unwrap(),
         block_size: block_size.unwrap(),
-        texels_per_block: texels_per_block.unwrap(),
         block_extent,
         packed,
         compressed,
@@ -130,7 +129,7 @@ fn to_block_extent(txt: String) -> (String, String, String) {
 }
 
 fn get_format_component_info(attributes: Vec<(String, String)>) -> FormatComponentInfo {
-    let name = None
+    let name = None;
 }
 
 fn get_format_plane_info(attributes: Vec<(String, String)>) -> FormatPlaneInfo {
