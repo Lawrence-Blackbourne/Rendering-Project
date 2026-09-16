@@ -19,7 +19,7 @@ create_generator! {
         block_extent: (u8, u8, u8),
 
         /// Stores if the data is packed or not.
-        /// On a non packed data format, the data is stored in a byte array, with each component
+        /// On a non-packed data format, the data is stored in a byte array, with each component
         /// taking up as many of these bytes as needed.
         /// The components are stored with the first components in the least significant indexes in
         /// the array.
@@ -29,7 +29,7 @@ create_generator! {
         /// value.
         /// The components are stored with the first components in the least significant bits in the
         /// integer.
-        /// The distinction matters due to the Endianess of CPUs.
+        /// The distinction matters due to the endianness of CPUs.
         packed: Option<u8>,
 
         /// The components of the format.
@@ -40,9 +40,25 @@ create_generator! {
     }
 
     impl ImageFormat {
-        pub fn get_num_texels(&self) -> u32 {
+        pub fn class(&self) -> ImageFormatClass {&self.class}
+        
+        pub fn num_bytes(&self) -> u8 {self.num_bytes}
+
+        pub fn block_extent(&self) -> (u8, u8, u8) {self.block_extent}
+
+        pub fn num_texels(&self) -> u32 {
             self.block_extent.0 as u32 * self.block_extent.1 as u32 * self.block_extent.2 as u32
         }
+
+        pub fn packed(&self) -> Option<u8> {self.packed}
+
+        pub fn components(&self) -> Vec<ImageFormatComponent> {&self.components}
+
+        pub fn component(&self, n: usize) -> Option<&ImageFormatComponent> {&self.components.get(n)}
+
+        pub fn planes(&self) -> &Vec<ImageFormatPlane> {self.planes}
+
+        pub fn plane(&self, n: usize) -> Option<&ImageFormatPlane> {&self.planes.get(n)}
 
         //TODO
         // get plane from component
@@ -68,14 +84,25 @@ create_generator! {
 
 create_generator! {
     struct ImageFormatComponent {
+        /// The index of the component
+        index: usize,
+
         /// What channel is this (e.g. red, green, blue, etc.).
-        pub channel_type: ImageFormatChannel,
+        channel_type: ImageFormatChannel,
 
         /// How the channel is stored
-        pub data_type: ImageFormatComponentDataType,
+        data_type: ImageFormatComponentDataType,
 
         /// The index for the plane
         plane: Option<usize>,
+    }
+
+    impl ImageFormatComponent {
+        pub fn index(&self) -> usize {self.index}
+
+        pub fn channel_type(&self) -> ImageFormatChannel {self.channel_type}
+
+        pub fn data_type(&self) -> ImageFormatComponentDataType {self.data_type}
     }
 }
 
@@ -96,6 +123,12 @@ create_generator! {
         size: ImageFormatComponentDataTypeSize,
 
         format: ImageFormatComponentDataTypeFormat,
+    }
+
+    impl ImageFormatComponentDataType {
+        pub fn size(&self) -> ImageFormatComponentDataTypeSize {self.size}
+
+        pub fn format(&self) -> ImageFormatComponentDataTypeFormat {self.size}
     }
 }
 
@@ -152,5 +185,14 @@ create_generator! {
     }
 }
 
-//todo
-struct ImageFormatPlane{}
+create_generator! {
+    //todo
+    struct ImageFormatPlane{
+        /// The index of the plane
+        index: usize,
+    }
+
+    impl ImageFormatPlane {
+        pub fn index(&self) -> usize {self.index}
+    }
+}
