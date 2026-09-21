@@ -10,7 +10,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::iter::FusedIterator;
 use std::path::Path;
 
-pub(super) fn tokenise_xml_file(
+pub fn tokenise_xml_file(
     file_path: impl AsRef<Path>,
 ) -> Result<TokenisedXml<File>, ParserError> {
     Ok(TokenisedXml::new(File::open(file_path)?))
@@ -22,7 +22,7 @@ pub(super) fn tokenise_xml_file(
 /// This is obviously fine for this use case, as we are reading in a file already stored on the
 /// computer, and this code is in no way related to security anyway.
 #[derive(Debug)]
-pub(super) struct TokenisedXml<T: Read> {
+pub struct TokenisedXml<T: Read> {
     // The source of text that the buffer reads from
     text: BufReader<T>,
 
@@ -38,7 +38,7 @@ pub(super) struct TokenisedXml<T: Read> {
 
 impl<T: Read> TokenisedXml<T> {
     /// Creates a new instance of the tokeniser from the provided text.
-    pub(super) fn new(text: T) -> Self {
+    pub fn new(text: T) -> Self {
         let text = BufReader::new(text);
         Self {
             text,
@@ -140,7 +140,7 @@ impl<T: Read> TokenisedXml<T> {
 }
 
 /// Describes a single token found in the XML stream.
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Token {
     StartTag,
     EndTag,
