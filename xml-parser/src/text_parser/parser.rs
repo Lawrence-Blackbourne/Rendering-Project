@@ -4,7 +4,7 @@
 //! We only run this in the build script, and it is benchmarked as taking 20.983ms to parse all the
 //! tokens in vk.xml.
 
-use super::ParserError;
+use super::{ParsedXml, ParserError};
 use super::tokeniser::{
     Token::{self, *},
     TokenisedXml, tokenise_xml_file,
@@ -15,19 +15,19 @@ use std::io::Read;
 use std::iter::{FusedIterator, Iterator};
 use std::path::Path;
 
-pub(super) fn parse_xml_file(file_path: impl AsRef<Path>) -> Result<ParsedXml<File>, ParserError> {
-    Ok(ParsedXml::new(tokenise_xml_file(file_path)?))
+pub fn parse_xml_file(file_path: impl AsRef<Path>) -> Result<StreamedParsedXml<File>, ParserError> {
+    Ok(StreamedParsedXml::new(tokenise_xml_file(file_path)?))
 }
 
 #[derive(Debug)]
-pub struct ParsedXml<T: Read> {
+pub struct StreamedParsedXml<T: Read> {
     tokens: TokenisedXml<T>,
     names: Vec<String>,
     state: State,
     is_done: bool,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Item {
     Element {
         name: String,
@@ -37,7 +37,7 @@ pub enum Item {
     EndCurrentElement,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum State {
     Start {
         found_declaration: bool,
@@ -64,7 +64,7 @@ enum State {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 enum ElementStage {
     ExpectingAttributeName,
     ExpectingEquals,
@@ -72,9 +72,9 @@ enum ElementStage {
     ReadingAttributeValue,
 }
 
-impl<T: Read> ParsedXml<T> {
-    fn new(tokens: TokenisedXml<T>) -> Self {
-        ParsedXml {
+impl<T: Read> StreamedParsedXml<T> {
+    pub fn new(tokens: TokenisedXml<T>) -> Self {
+        StreamedParsedXml {
             tokens,
             names: Vec::new(),
             state: Start {
@@ -86,7 +86,7 @@ impl<T: Read> ParsedXml<T> {
     }
 }
 
-impl<T: Read> Iterator for ParsedXml<T> {
+impl<T: Read> Iterator for StreamedParsedXml<T> {
     type Item = Result<Item, ParserError>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -119,27 +119,11 @@ impl<T: Read> Iterator for ParsedXml<T> {
     }
 }
 
-impl<T: Read> FusedIterator for ParsedXml<T> {}
+impl<T: Read> ParsedXml for StreamedParsedXml<T> {}
 
-impl<T: Read> ParsedXml<T> {
-    /// Skips to the end of the element currently being looked at by the parser.
-    /// If the parser is outside the root element, skips to the very end of the file.
-    pub fn skip_current_element(&mut self) -> Result<(), ParserError> {
-        let mut current_depth = 1;
-        loop {
-            match self.next() {
-                Some(Ok(Item::Element { .. })) => current_depth += 1,
-                Some(Ok(Item::EndCurrentElement)) => current_depth -= 1,
-                Some(Ok(_)) => (),
-                Some(Err(e)) => return Err(e),
-                None => return Ok(()),
-            }
-            if current_depth == 0 {
-                break;
-            }
-        }
-        Ok(())
-    }
+impl<T: Read> FusedIterator for StreamedParsedXml<T> {}
+
+impl<T: Read> StreamedParsedXml<T> {
 
     fn process_token(&mut self, token: Token) -> Option<Result<Item, ParserError>> {
         match &mut self.state {
@@ -372,16 +356,16 @@ impl<T: Read> ParsedXml<T> {
             Start {
                 found_start_tag: true,
                 ..
-            } => Err(ParserError::FileCutShortAbruptlyDuringTag),
-            Declaration { .. } => Err(ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
-            StartTagFound => Err(ParserError::FileCutShortAbruptlyDuringTag),
-            Element { .. } => Err(ParserError::FileCutShortAbruptlyDuringTag),
+            } => Err(ParserError::TextCutShortAbruptlyDuringTag),
+            Declaration { .. } => Err(ParserError::TextCutShortAbruptlyDuringXMLDeclaration),
+            StartTagFound => Err(ParserError::TextCutShortAbruptlyDuringTag),
+            Element { .. } => Err(ParserError::TextCutShortAbruptlyDuringTag),
             Neutral if self.names.is_empty() => Ok(()),
             Neutral => Err(ParserError::ElementNotClosed),
             TextBlock(_) if self.names.is_empty() => Ok(()),
             TextBlock(_) => Err(ParserError::ElementNotClosed),
-            SelfClosingElement => Err(ParserError::FileCutShortAbruptlyDuringTag),
-            ClosingElement { .. } => Err(ParserError::FileCutShortAbruptlyDuringTag),
+            SelfClosingElement => Err(ParserError::TextCutShortAbruptlyDuringTag),
+            ClosingElement { .. } => Err(ParserError::TextCutShortAbruptlyDuringTag),
         }
     }
 }
@@ -406,7 +390,7 @@ mod tests {
 
     #[test]
     fn cannot_parse_failing_text() {
-        let _ = parse_xml_file(&Path::new("")).unwrap_err();
+        let _ = parse_xml_file(Path::new("")).unwrap_err();
     }
 
     #[test]
@@ -423,15 +407,15 @@ mod tests {
             ("=", ParserError::InvalidToken(Equals)),
             ("\n\t \"", ParserError::InvalidToken(QuotationMark)),
             ("?", ParserError::InvalidToken(QuestionMark)),
-            ("<?", ParserError::FileCutShortAbruptlyDuringXMLDeclaration),
+            ("<?", ParserError::TextCutShortAbruptlyDuringXMLDeclaration),
             (
                 "<????test?",
-                ParserError::FileCutShortAbruptlyDuringXMLDeclaration,
+                ParserError::TextCutShortAbruptlyDuringXMLDeclaration,
             ),
         ];
         for test in data {
             assert_eq!(
-                ParsedXml::new(TokenisedXml::new(TestReader::new(test.0)))
+                StreamedParsedXml::new(TokenisedXml::new(TestReader::new(test.0)))
                     .next()
                     .unwrap()
                     .unwrap_err()
@@ -439,7 +423,7 @@ mod tests {
                 test.1.to_string()
             );
             assert_eq!(
-                ParsedXml::new(TokenisedXml::new(
+                StreamedParsedXml::new(TokenisedXml::new(
                     TestReader::new(test.0).with_fail_on_end(true)
                 ))
                 .next()
@@ -454,7 +438,7 @@ mod tests {
     #[test]
     fn test_immediate_error() {
         assert_eq!(
-            ParsedXml::new(TokenisedXml::new(TestReader::new("")))
+            StreamedParsedXml::new(TokenisedXml::new(TestReader::new("")))
                 .next()
                 .unwrap()
                 .unwrap_err()
@@ -462,7 +446,7 @@ mod tests {
             ParserError::NoRootElement.to_string(),
         );
         assert_eq!(
-            ParsedXml::new(TokenisedXml::new(
+            StreamedParsedXml::new(TokenisedXml::new(
                 TestReader::new("<?").with_fail_on_end(true)
             ))
             .next()
@@ -631,7 +615,7 @@ mod tests {
             ("<??>/", ParserError::InvalidToken(Slash)),
             ("<??>\"", ParserError::InvalidToken(QuotationMark)),
             ("<??>?", ParserError::InvalidToken(QuestionMark)),
-            ("<", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<", ParserError::TextCutShortAbruptlyDuringTag),
             ("<=", ParserError::InvalidToken(Equals)),
             ("</=", ParserError::InvalidToken(Slash)),
             ("<??><>", ParserError::InvalidToken(EndTag)),
@@ -640,12 +624,12 @@ mod tests {
             ("< ", ParserError::InvalidToken(Whitespace(' '))),
             ("<??><<", ParserError::InvalidToken(StartTag)),
             ("<??><?", ParserError::InvalidToken(QuestionMark)),
-            ("<element", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element", ParserError::TextCutShortAbruptlyDuringTag),
             ("<element=", ParserError::InvalidToken(Equals)),
             ("<element\"", ParserError::InvalidToken(QuotationMark)),
             ("<??><element<", ParserError::InvalidToken(StartTag)),
             ("<element?", ParserError::InvalidToken(QuestionMark)),
-            ("<element attribute=\"value\"", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element attribute=\"value\"", ParserError::TextCutShortAbruptlyDuringTag),
             ("<element attribute=\"value\"=", ParserError::InvalidToken(Equals)),
             ("<??><element attribute=\"value\"\"", ParserError::InvalidToken(QuotationMark)),
             ("<element attribute=\"value\"<", ParserError::InvalidToken(StartTag)),
@@ -678,8 +662,8 @@ mod tests {
                 "<element></element ?",
                 ParserError::InvalidToken(QuestionMark),
             ),
-            ("<element><", ParserError::FileCutShortAbruptlyDuringTag),
-            ("<element></", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element><", ParserError::TextCutShortAbruptlyDuringTag),
+            ("<element></", ParserError::TextCutShortAbruptlyDuringTag),
         ];
         for test in data2 {
             check_xml_gives_correct_values(
@@ -694,7 +678,7 @@ mod tests {
         let data3 = [
             (
                 "<element attribute=\"value\"/",
-                ParserError::FileCutShortAbruptlyDuringTag,
+                ParserError::TextCutShortAbruptlyDuringTag,
             ),
             (
                 "<element attribute=\"value\"/=",
@@ -729,25 +713,25 @@ mod tests {
     fn test_errors_in_attributes() {
         #[rustfmt::skip]
         let data = [
-            ("<element ", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element ", ParserError::TextCutShortAbruptlyDuringTag),
             ("<element <", ParserError::InvalidToken(StartTag)),
             ("<element ?", ParserError::InvalidToken(QuestionMark)),
             ("<element =", ParserError::InvalidToken(Equals)),
             ("<element \"", ParserError::InvalidToken(QuotationMark)),
-            ("<element name", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element name", ParserError::TextCutShortAbruptlyDuringTag),
             ("<element name<", ParserError::InvalidToken(StartTag)),
             ("<element name>", ParserError::InvalidToken(EndTag)),
             ("<element name?", ParserError::InvalidToken(QuestionMark)),
             ("<element name/", ParserError::InvalidToken(Slash)),
             ("<element name\"", ParserError::InvalidToken(QuotationMark)),
-            ("<element name=", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element name=", ParserError::TextCutShortAbruptlyDuringTag),
             ("<element name=<", ParserError::InvalidToken(StartTag)),
             ("<element name=>", ParserError::InvalidToken(EndTag)),
             ("<element name =?", ParserError::InvalidToken(QuestionMark)),
             ("<element name= /", ParserError::InvalidToken(Slash)),
             ("<element name = =", ParserError::InvalidToken(Equals)),
-            ("<element name=\"", ParserError::FileCutShortAbruptlyDuringTag),
-            ("<element name=\"text", ParserError::FileCutShortAbruptlyDuringTag),
+            ("<element name=\"", ParserError::TextCutShortAbruptlyDuringTag),
+            ("<element name=\"text", ParserError::TextCutShortAbruptlyDuringTag),
             ("<element name=\">?/=Value <", ParserError::InvalidToken(StartTag)),
             ("<element name=\">?/=Value \" name2=\"value2\"<", ParserError::InvalidToken(StartTag)),
         ];
@@ -824,7 +808,7 @@ mod tests {
             }],
             Some(ParserError::ElementNotClosed),
         );
-        let mut xml = ParsedXml::new(TokenisedXml::new(
+        let mut xml = StreamedParsedXml::new(TokenisedXml::new(
             TestReader::new("<element>text\n").with_fail_on_end(true),
         ));
         assert_eq!(
@@ -854,93 +838,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn test_skip_current_element() {
-        let mut xml = ParsedXml::new(TokenisedXml::new(TestReader::new(
-            "<root><middle1 name=\"value\"><inner1> text </inner1>\
-            <inner2/></middle1><middle2/></root>",
-        )));
-        assert_eq!(
-            xml.next().unwrap().unwrap(),
-            Item::Element {
-                name: String::from("root"),
-                attributes: Vec::new(),
-            },
-        );
-        assert_eq!(
-            xml.next().unwrap().unwrap(),
-            Item::Element {
-                name: String::from("middle1"),
-                attributes: vec![(String::from("name"), String::from("value"))],
-            },
-        );
-        assert_eq!(xml.skip_current_element().unwrap(), ());
-        assert_eq!(
-            xml.next().unwrap().unwrap(),
-            Item::Element {
-                name: String::from("middle2"),
-                attributes: Vec::new(),
-            },
-        );
-        assert_eq!(xml.skip_current_element().unwrap(), ());
-        assert_eq!(xml.next().unwrap().unwrap(), Item::EndCurrentElement);
-        assert!(xml.next().is_none());
-    }
-
-    #[test]
-    fn test_skipping_root_element() {
-        let mut xml = ParsedXml::new(TokenisedXml::new(TestReader::new(
-            "<root><middle1 name=\"value\"><inner1> text </inner1>\
-            <inner2/></middle1><middle2/></root>",
-        )));
-        assert_eq!(
-            xml.next().unwrap().unwrap(),
-            Item::Element {
-                name: String::from("root"),
-                attributes: Vec::new(),
-            },
-        );
-        assert_eq!(xml.skip_current_element().unwrap(), ());
-        assert!(xml.next().is_none());
-    }
-
-    #[test]
-    fn test_skipping_outside_root_element() {
-        let mut xml = ParsedXml::new(TokenisedXml::new(TestReader::new("<root/>")));
-        assert_eq!(xml.skip_current_element().unwrap(), ());
-        assert!(xml.next().is_none());
-        let mut xml = ParsedXml::new(TokenisedXml::new(TestReader::new("<root/>")));
-        assert_eq!(
-            xml.next().unwrap().unwrap(),
-            Item::Element {
-                name: String::from("root"),
-                attributes: Vec::new(),
-            },
-        );
-        assert_eq!(xml.next().unwrap().unwrap(), Item::EndCurrentElement);
-        assert_eq!(xml.skip_current_element().unwrap(), ());
-        assert!(xml.next().is_none());
-    }
-
-    #[test]
-    fn test_errors_in_skipping_current_element() {
-        let mut xml = ParsedXml::new(TokenisedXml::new(TestReader::new("<root><inner>")));
-        assert_eq!(
-            xml.next().unwrap().unwrap(),
-            Item::Element {
-                name: String::from("root"),
-                attributes: Vec::new(),
-            },
-        );
-        assert_eq!(
-            xml.skip_current_element().unwrap_err().to_string(),
-            ParserError::ElementNotClosed.to_string(),
-        );
-        assert!(xml.next().is_none());
-    }
-
     fn check_xml_gives_correct_values(txt: &str, good: Vec<Item>, err: Option<ParserError>) {
-        let mut xml = ParsedXml::new(TokenisedXml::new(TestReader::new(txt)));
+        let mut xml = StreamedParsedXml::new(TokenisedXml::new(TestReader::new(txt)));
         for item in good {
             assert_eq!(xml.next().unwrap().unwrap(), item);
         }

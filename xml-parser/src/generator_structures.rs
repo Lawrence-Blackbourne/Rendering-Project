@@ -1,5 +1,3 @@
-pub mod format_generator_enums;
-
 pub trait Generator {
     fn generate_text() -> String;
 }
@@ -7,13 +5,22 @@ pub trait Generator {
 /// This macro will generate an enum which implements `GeneratedEnum`.
 /// It will also implement `TryFrom<&str>`.
 /// The enum will automatically have `#[non_exhaustive]` and
-/// `#[derive(Debug, Copy, Clone, PartialEq, Eq)]`, but other attributes and doc comments can be
+/// `#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]`, but other attributes and doc comments can be
 /// added.
 /// These other attributes and doc comments will be passed along to the ATTRIBUTES section, to be
 /// used on the final enum in the generated code.
 /// Similarly, doc comments and attributes can be added to each element, which will go to that
 /// elements stored text, to be used on the final enum in the generated code.
+/// The struct generated in place will have pub(super) and the one generated later will have the
+/// visibility given for its elements.
 /// todo FIX COMMENTS
+/// 
+/// TODO
+/// Have some kind of with data option on create_generator to allow us to pass an array of
+/// `(ImageFormat, ImageFormatDetails)` when generating the final code which will then add functions
+/// to get that data from the ImageFormat.
+/// Move this all into one create_generator! function that can then also generate one big
+/// generate_text function, which would take the above array
 macro_rules! create_generator {
     // Internal helper branches.
     (@format_attribute doc = $text:expr) => {concat!("///", $text)};
@@ -57,7 +64,7 @@ macro_rules! create_generator {
     ) => {
         $(#[$attribute])*
         #[non_exhaustive]
-        #[derive(Debug, Copy, Clone, PartialEq, Eq)]
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
         pub enum $name {
             $(
                 $(#[$element_attribute])*
@@ -69,17 +76,13 @@ macro_rules! create_generator {
             const ATTRIBUTES: &'static str = concat!(
                 $(create_generator!(@format_attribute $attribute), "\n",)*
                 "#[non_exhaustive]\n",
-                "#[derive(Debug, Copy, Clone, PartialEq, Eq)]",
+                "#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]",
             );
 
             const NAME: &'static str = stringify!($name);
 
             const ELEMENTS: &'static [&str] = &[
                 $(stringify!($element)),*
-            ];
-
-            pub const ALL: &'static [Self] = &[
-                $($name::$element),*
             ];
 
             fn generate_element_text(element: &str) -> &'static str {
@@ -104,7 +107,7 @@ macro_rules! create_generator {
                 match value {
                     $($xml_name => Ok($name::$element),)*
                     other => Err(
-                        String::from(concat!("invalid ", stringify!($name), "value: ")) + other
+                        String::from(concat!("invalid ", stringify!($name), " value: ")) + other
                     ),
                 }
             }
@@ -121,7 +124,7 @@ macro_rules! create_generator {
             ),*
             $(,)?
         }
-        $($extra:block)*
+        $($extra:tt)*
     ) => {
         $(#[$attribute])*
         pub enum $name {
@@ -156,8 +159,6 @@ macro_rules! create_generator {
         }
 
         create_generator!(@generator_implementation $name, enum, $($extra),*);
-
-        $($extra)*
     };
     
     // The struct branch.
@@ -166,7 +167,7 @@ macro_rules! create_generator {
         struct $name:ident {
             $(
                 $(#[$element_attribute:meta])*
-                $visability:vis $element:ident: $type:ty
+                $visibility:vis $element:ident: $type:ty
             ),*
             $(,)?
         }
@@ -176,7 +177,7 @@ macro_rules! create_generator {
         pub struct $name {
             $(
                 $(#[$element_attribute])*
-                $visability $element: $type,
+                pub(super) $element: $type,
             )*
         }
 
@@ -196,7 +197,7 @@ macro_rules! create_generator {
                     $(
                         stringify!($element) => concat!(
                             $('\t', create_generator!(@format_attribute $element_attribute), "\n",)*
-                            '\t', stringify!($visability), ' ', stringify!($element), ": ",
+                            '\t', stringify!($visibility), ' ', stringify!($element), ": ",
                             stringify!($type),
                         ),
                     )*
@@ -206,9 +207,7 @@ macro_rules! create_generator {
         }
 
         create_generator!(@generator_implementation $name, struct, $($extra),*);
-
-        $($extra)*
     };
 }
 
-pub(in crate::generator_structures) use create_generator;
+pub(crate) use create_generator;
