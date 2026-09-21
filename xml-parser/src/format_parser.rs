@@ -27,7 +27,7 @@ pub(super) struct FormatDetails {
     /// The components are stored with the first components in the least significant bits in the
     /// integer.
     /// The distinction matters due to the endianness of CPUs.
-    /// There may be padding to fill the the words if the channels do not.
+    /// There may be padding to fill the words if the channels do not.
     packed: Option<u8>,
 
     /// The texel planes in the format.
