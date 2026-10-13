@@ -10,9 +10,7 @@ use std::io::{self, BufRead, BufReader, Read};
 use std::iter::FusedIterator;
 use std::path::Path;
 
-pub fn tokenise_xml_file(
-    file_path: impl AsRef<Path>,
-) -> Result<TokenisedXml<File>, ParserError> {
+pub fn tokenise_xml_file(file_path: impl AsRef<Path>) -> Result<TokenisedXml<File>, ParserError> {
     Ok(TokenisedXml::new(File::open(file_path)?))
 }
 

@@ -2,13 +2,18 @@ mod format_parser;
 mod generator_structures;
 pub mod text_parser;
 
-use format_parser::{FormatDetails, format_generator_structures::{ImageFormat}};
+use format_parser::{FormatDetails, format_generator_structures::ImageFormat};
 
-use std::path::Path;
-use text_parser::Item;
-use crate::format_parser::format_generator_structures::{ImageFormatChannel, ImageFormatClass, ImageFormatComponent, ImageFormatComponentCompressionScheme, ImageFormatComponentDataType, ImageFormatComponentDataTypeFormat, ImageFormatComponentDataTypeSize, ImageFormatPlane, ImageFormatScaleDivisor, ImageFormatScaleDivisors};
+use crate::format_parser::format_generator_structures::{
+    ImageFormatChannel, ImageFormatClass, ImageFormatComponent,
+    ImageFormatComponentCompressionScheme, ImageFormatComponentDataType,
+    ImageFormatComponentDataTypeFormat, ImageFormatComponentDataTypeSize, ImageFormatPlane,
+    ImageFormatScaleDivisor, ImageFormatScaleDivisors,
+};
 use crate::generator_structures::Generator;
 use crate::text_parser::ParsedXml;
+use std::path::Path;
+use text_parser::Item;
 
 #[derive(Debug, Clone, Eq, PartialEq, Hash)]
 pub struct ParsedDetails {
@@ -63,6 +68,7 @@ pub fn temp() {
     ImageFormatComponentDataTypeFormat::generate_text();
     ImageFormatComponentDataTypeSize::generate_text();
     ImageFormatComponentCompressionScheme::generate_text();
+    ImageFormat::generate_getters(Vec::new());
 }
 
 #[cfg(test)]

@@ -14,7 +14,7 @@ pub trait Generator {
 /// The struct generated in place will have pub(super) and the one generated later will have the
 /// visibility given for its elements.
 /// todo FIX COMMENTS
-/// 
+///
 /// TODO
 /// Have some kind of with data option on create_generator to allow us to pass an array of
 /// `(ImageFormat, ImageFormatDetails)` when generating the final code which will then add functions
@@ -23,8 +23,17 @@ pub trait Generator {
 /// generate_text function, which would take the above array
 macro_rules! create_generator {
     // Internal helper branches.
+    (@replace $old:tt, $new:tt) => {$new};
+
     (@format_attribute doc = $text:expr) => {concat!("///", $text)};
     (@format_attribute $other:meta) => {stringify!(#[$other])};
+
+    (@enum_to_constant_text $name:ident, $element:ident) => {
+        String::from(stringify!($name::$element))
+    };
+    (@enum_to_constant_text $name:ident, $element:ident, $replacement:ident, $type:ty) => {
+        format!("{}({})", stringify!($name::$element), $replacement.to_constant())
+    };
 
     (@generator_implementation $name:ident, $type:ident $(,$extra:tt)* $(,)?) => {
         impl Generator for $name {
@@ -57,10 +66,14 @@ macro_rules! create_generator {
         xml enum $name:ident {
             $(
                 $(#[$element_attribute:meta])*
-                $element:ident: $xml_name:literal
+                $element:ident $(: $xml_name:literal)?
             ),*
             $(,)?
         }
+        $(data struct $data_struct_name:ident{
+            $($data_name:ident: $data_type:ty),*
+            $(,)?
+        })?
     ) => {
         $(#[$attribute])*
         #[non_exhaustive]
@@ -105,13 +118,64 @@ macro_rules! create_generator {
 
             fn try_from<'a>(value: &'a str) -> Result<Self, Self::Error> {
                 match value {
-                    $($xml_name => Ok($name::$element),)*
+                    $($($xml_name => Ok($name::$element),)*)*
                     other => Err(
                         String::from(concat!("invalid ", stringify!($name), " value: ")) + other
                     ),
                 }
             }
         }
+
+        impl std::fmt::Display for $name {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                match self {$(
+                    $name::$element => write!(f, "{}", stringify!($element)),
+                )*}
+            }
+        }
+
+        impl ToConstant for $name {
+            fn to_constant(self) -> String {
+                match self {$(
+                    $name::$element => String::from(stringify!($name::$element)),
+                )*}
+            }
+        }
+
+        $(
+            pub struct $data_struct_name {
+                $($data_name: $data_type,)*
+            }
+
+            impl $name {
+                pub fn generate_getters(data: Vec<($name, $data_struct_name)>) -> String {
+                    //TODO check unique data entry present for all variants
+
+                    $(
+                        let mut $data_name = format!(
+                            "\tfn {}(&self) => {} {{\
+                            \t\tmatch self {{",
+                            stringify!($data_name),
+                            stringify!($data_type),
+                        );
+                    )*
+
+                    for (variant, item) in data {
+                        $($data_name.push_str(
+                            &format!("\t\t\t{} => {},\n", variant, item.$data_name.to_constant())
+                        );)*
+                    }
+
+                    $(
+                        $data_name += "\t\t}\n\t}";
+                    )*
+
+                    let mut result = String::new();
+                    $(result.push_str(&format!("{}\t\t}}\n\t}}", $data_name));)*
+                    result
+                }
+            }
+        )*
     };
 
     // The enum branch
@@ -120,7 +184,7 @@ macro_rules! create_generator {
         enum $name:ident {
             $(
                 $(#[$element_attribute:meta])*
-                $element:ident($type:ty)
+                $element:ident$(($type:ty))?
             ),*
             $(,)?
         }
@@ -130,7 +194,7 @@ macro_rules! create_generator {
         pub enum $name {
             $(
                 $(#[$element_attribute])*
-                $element($type),
+                $element$(($type))*,
             )*
         }
 
@@ -150,7 +214,7 @@ macro_rules! create_generator {
                     $(
                         stringify!($element) => concat!(
                             $('\t', create_generator!(@format_attribute $element_attribute), "\n",)*
-                            '\t', stringify!($name($type))
+                            '\t', stringify!($name$(($type))*)
                         ),
                     )*
                     _ => panic!("Unknown element"),
@@ -159,8 +223,17 @@ macro_rules! create_generator {
         }
 
         create_generator!(@generator_implementation $name, enum, $($extra),*);
+
+        impl ToConstant for $name {
+            fn to_constant(self) -> String {
+                match self {
+                    $($name::$element$((create_generator!(@replace $type, val)))* =>
+                        create_generator!(@enum_to_constant_text $name, $element $(,val , $type)*),)*
+                }
+            }
+        }
     };
-    
+
     // The struct branch.
     (
         $(#[$attribute:meta])*
@@ -207,7 +280,56 @@ macro_rules! create_generator {
         }
 
         create_generator!(@generator_implementation $name, struct, $($extra),*);
+
+        impl ToConstant for $name {
+            fn to_constant(self) -> String {
+                let mut result = format!("{} {{\n", stringify!($name));
+                $(result.push_str(&format!(
+                    "\t{}: {},",
+                    stringify!($element),
+                    self.$element.to_constant(),
+                ));)*
+                format!("{result}\n}}")
+            }
+        }
     };
 }
 
 pub(crate) use create_generator;
+
+pub trait ToConstant {
+    fn to_constant(self) -> String;
+}
+
+impl ToConstant for u32 {
+    fn to_constant(self) -> String {
+        self.to_string()
+    }
+}
+
+impl ToConstant for (u32, u32, u32) {
+    fn to_constant(self) -> String {
+        format!("({}, {}, {})", self.0.to_string(), self.1.to_string(), self.2.to_string())
+    }
+}
+
+impl <T: ToConstant> ToConstant for Option<T> {
+    fn to_constant(self) -> String {
+        match self {
+            Some(value) => format!("Some({})", value.to_constant()),
+            None => String::from("None"),
+        }
+    }
+}
+
+impl <T: ToConstant> ToConstant for Vec<T> {
+    fn to_constant(self) -> String {
+        format!(
+            "vec![{}]",
+            self.into_iter()
+                .map(|item| item.to_constant())
+                .collect::<Vec<_>>()
+                .join(", "),
+        )
+    }
+}

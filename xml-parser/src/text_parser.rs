@@ -90,10 +90,7 @@ impl std::fmt::Display for ParserError {
                 f,
                 "closure for element \"{e}\" found after closure for root element found"
             ),
-            ParserError::InvalidToken(t) => write!(
-                f,
-                "an invalid \"{t}\" token was found"
-            ),
+            ParserError::InvalidToken(t) => write!(f, "an invalid \"{t}\" token was found"),
             ParserError::IoError(_) => write!(f, "an io error occurred while reading the text"),
         }
     }
@@ -130,9 +127,9 @@ pub fn benchmark_parser() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::text_parser::tokeniser::{Token, TokenisedXml};
     use io::Read;
     use std::error::Error;
-    use crate::text_parser::tokeniser::{Token, TokenisedXml};
 
     #[test]
     fn can_parse_xml() {
@@ -239,9 +236,18 @@ mod tests {
                 ParserError::TextCutShortAbruptlyDuringXMLDeclaration,
                 "text cut short during the XML declaration",
             ),
-            (ParserError::TextCutShortAbruptlyDuringTag, "text cut short during a tag"),
-            (ParserError::NoRootElement, "text does not contain a root element"),
-            (ParserError::MultipleRootElements, "text contains multiple root elements"),
+            (
+                ParserError::TextCutShortAbruptlyDuringTag,
+                "text cut short during a tag",
+            ),
+            (
+                ParserError::NoRootElement,
+                "text does not contain a root element",
+            ),
+            (
+                ParserError::MultipleRootElements,
+                "text contains multiple root elements",
+            ),
             (ParserError::ElementNotClosed, "an element was not closed"),
             (
                 ParserError::ElementsClosedOutOfOrder {
@@ -254,11 +260,14 @@ mod tests {
                 ParserError::ElementClosedAfterRootElementClosed(String::from("test")),
                 "closure for element \"test\" found after closure for root element found",
             ),
-            (ParserError::InvalidToken(Token::Equals), "an invalid \"Equals\" token was found"),
+            (
+                ParserError::InvalidToken(Token::Equals),
+                "an invalid \"Equals\" token was found",
+            ),
             (
                 ParserError::from(io::Error::other("test")),
                 PARSER_IO_ERROR_TEST_STRING,
-            )
+            ),
         ];
         for test in data {
             assert_eq!(format!("{}", test.0), test.1);
@@ -284,11 +293,15 @@ mod tests {
             assert!(test.source().is_none())
         }
         assert_eq!(
-            format!("{}", ParserError::from(io::Error::other("test")).source().unwrap()),
+            format!(
+                "{}",
+                ParserError::from(io::Error::other("test"))
+                    .source()
+                    .unwrap()
+            ),
             format!("{}", io::Error::other("test")),
         )
     }
-
 
     #[derive(Debug, Clone, PartialEq, Eq)]
     pub(crate) struct TestReader {

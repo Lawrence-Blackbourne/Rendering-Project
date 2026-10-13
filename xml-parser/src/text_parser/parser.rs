@@ -4,11 +4,11 @@
 //! We only run this in the build script, and it is benchmarked as taking 20.983ms to parse all the
 //! tokens in vk.xml.
 
-use super::{ParsedXml, ParserError};
 use super::tokeniser::{
     Token::{self, *},
     TokenisedXml, tokenise_xml_file,
 };
+use super::{ParsedXml, ParserError};
 use State::*;
 use std::fs::File;
 use std::io::Read;
@@ -124,7 +124,6 @@ impl<T: Read> ParsedXml for StreamedParsedXml<T> {}
 impl<T: Read> FusedIterator for StreamedParsedXml<T> {}
 
 impl<T: Read> StreamedParsedXml<T> {
-
     fn process_token(&mut self, token: Token) -> Option<Result<Item, ParserError>> {
         match &mut self.state {
             Start {

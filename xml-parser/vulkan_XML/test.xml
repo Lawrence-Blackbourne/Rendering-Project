@@ -1,0 +1,9 @@
+<registry>
+    <formats>
+        <format name="VK_FORMAT_BC1_RGB_UNORM_BLOCK" class="BC1_RGB" blockSize="8" texelsPerBlock="16" blockExtent="4,4,1" compressed="BC">
+            <component name="R" bits="compressed" numericFormat="UNORM" />
+            <component name="G" bits="compressed" numericFormat="UNORM" />
+            <component name="B" bits="compressed" numericFormat="UNORM" />
+        </format>
+    </formats>
+</registry>

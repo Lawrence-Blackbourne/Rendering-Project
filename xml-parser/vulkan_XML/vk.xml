@@ -34078,7 +34078,7 @@ endif::VK_KHR_internally_synchronized_queues[]
             <component name="B" bits="compressed" numericFormat="SFLOAT" />
             <component name="A" bits="compressed" numericFormat="SFLOAT" />
         </format>
-       <format name="VK_FORMAT_ASTC_6x6x5_UNORM_BLOCK_EXT" class="ASTC_6x6x5" blockSize="16" texelsPerBlock="180" blockExtent="6,6,5" compressed="ASTC LDR">
+        <format name="VK_FORMAT_ASTC_6x6x5_UNORM_BLOCK_EXT" class="ASTC_6x6x5" blockSize="16" texelsPerBlock="180" blockExtent="6,6,5" compressed="ASTC LDR">
             <component name="R" bits="compressed" numericFormat="UNORM" />
             <component name="G" bits="compressed" numericFormat="UNORM" />
             <component name="B" bits="compressed" numericFormat="UNORM" />
@@ -34096,7 +34096,7 @@ endif::VK_KHR_internally_synchronized_queues[]
             <component name="B" bits="compressed" numericFormat="SFLOAT" />
             <component name="A" bits="compressed" numericFormat="SFLOAT" />
         </format>
-       <format name="VK_FORMAT_ASTC_6x6x6_UNORM_BLOCK_EXT" class="ASTC_6x6x6" blockSize="16" texelsPerBlock="216" blockExtent="6,6,6" compressed="ASTC LDR">
+        <format name="VK_FORMAT_ASTC_6x6x6_UNORM_BLOCK_EXT" class="ASTC_6x6x6" blockSize="16" texelsPerBlock="216" blockExtent="6,6,6" compressed="ASTC LDR">
             <component name="R" bits="compressed" numericFormat="UNORM" />
             <component name="G" bits="compressed" numericFormat="UNORM" />
             <component name="B" bits="compressed" numericFormat="UNORM" />
