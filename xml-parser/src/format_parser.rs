@@ -3,39 +3,6 @@ pub(crate) mod format_generator_structures;
 use super::text_parser::{Item, ParsedXml};
 use format_generator_structures::*;
 
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(super) struct FormatDetails {
-    /// The class of the format.
-    pub(super) class: ImageFormatClass,
-
-    /// The number of bytes in a single block of texels.
-    num_bytes: u32,
-
-    /// The size in 3D space of each block of texels.
-    block_extent: (u32, u32, u32),
-
-    /// Stores if the data is packed or not.
-    /// On a non-packed data format, the data is stored in a byte array, with each component
-    /// taking up as many of these bytes as needed.
-    /// The components are stored with the first components in the least significant indexes in
-    /// the array.
-    /// On a packed data format, the data is stored in integer(s) with the same number of bits
-    /// as the packed value, and these are stored in an array. Multiple components may be in a
-    /// single packed value, and there may (rarely) be unused space at the end of each packed
-    /// value.
-    /// The components are stored with the first components in the least significant bits in the
-    /// integer.
-    /// The distinction matters due to the endianness of CPUs.
-    /// There may be padding to fill the words if the channels do not.
-    packed: Option<u32>,
-
-    /// The texel planes in the format.
-    /// A plane is a memory layout.
-    /// Lots of formats only have one plane, but some have more.
-    planes: Vec<ImageFormatPlane>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FormatAttributeInfo {
     /// The format that this is the details for.
@@ -78,7 +45,7 @@ struct NamedComponentInfo {
     plane: u32,
 }
 
-pub fn parse_formats<T: ParsedXml>(xml: &mut T, vec: &mut Vec<(ImageFormat, FormatDetails)>) {
+pub fn parse_formats<T: ParsedXml>(xml: &mut T, vec: &mut Vec<(ImageFormat, ImageFormatData)>) {
     loop {
         match xml.next() {
             Some(Ok(Item::Element { name, attributes })) if name == String::from("format") => {
@@ -100,7 +67,7 @@ pub fn parse_formats<T: ParsedXml>(xml: &mut T, vec: &mut Vec<(ImageFormat, Form
 fn get_format<T: ParsedXml>(
     attributes: Vec<(String, String)>,
     xml: &mut T,
-) -> Option<(ImageFormat, FormatDetails)> {
+) -> Option<(ImageFormat, ImageFormatData)> {
     let attribute_info = match get_format_attribute_info(attributes) {
         Some(info) => info,
         None => {
@@ -148,9 +115,10 @@ fn get_format<T: ParsedXml>(
     }
     Some((
         attribute_info.format,
-        FormatDetails {
+        ImageFormatData {
             class: attribute_info.class,
             num_bytes: attribute_info.num_bytes,
+            texels_per_block: attribute_info.texels_per_block,
             block_extent: attribute_info.block_extent,
             packed: attribute_info.packed,
             planes,

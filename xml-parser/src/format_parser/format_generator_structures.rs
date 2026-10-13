@@ -384,9 +384,37 @@ create_generator! {
     }
 
     data struct ImageFormatData {
-        num_bits: u32,
+        /// The class of the format.
+        class: ImageFormatClass,
+    
+        /// The number of bytes in a single block of texels.
+        num_bytes: u32,
+    
+        /// The number of texels in a single block.
+        /// May not be equal to the values of block_extent multiplied together.
+        texels_per_block: u32,
+        
+        /// The size in 3D space of each block of texels.
         block_extent: (u32, u32, u32),
+    
+        /// Stores if the data is packed or not.
+        /// On a non-packed data format, the data is stored in a byte array, with each component
+        /// taking up as many of these bytes as needed.
+        /// The components are stored with the first components in the least significant indexes in
+        /// the array.
+        /// On a packed data format, the data is stored in integer(s) with the same number of bits
+        /// as the packed value, and these are stored in an array. Multiple components may be in a
+        /// single packed value, and there may (rarely) be unused space at the end of each packed
+        /// value.
+        /// The components are stored with the first components in the least significant bits in the
+        /// integer.
+        /// The distinction matters due to the endianness of CPUs.
+        /// There may be padding to fill the words if the channels do not.
         packed: Option<u32>,
+    
+        /// The texel planes in the format.
+        /// A plane is a memory layout.
+        /// Lots of formats only have one plane, but some have more.
         planes: Vec<ImageFormatPlane>,
     }
 }

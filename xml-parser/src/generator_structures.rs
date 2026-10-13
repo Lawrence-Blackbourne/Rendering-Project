@@ -2,6 +2,9 @@ pub trait Generator {
     fn generate_text() -> String;
 }
 
+
+
+
 /// This macro will generate an enum which implements `GeneratedEnum`.
 /// It will also implement `TryFrom<&str>`.
 /// The enum will automatically have `#[non_exhaustive]` and
@@ -15,7 +18,7 @@ pub trait Generator {
 /// visibility given for its elements.
 /// todo FIX COMMENTS
 ///
-/// TODO
+/// TODO take comments on data struct and pass it to the functions on xml enum
 /// Have some kind of with data option on create_generator to allow us to pass an array of
 /// `(ImageFormat, ImageFormatDetails)` when generating the final code which will then add functions
 /// to get that data from the ImageFormat.
@@ -70,10 +73,16 @@ macro_rules! create_generator {
             ),*
             $(,)?
         }
-        $(data struct $data_struct_name:ident{
-            $($data_name:ident: $data_type:ty),*
-            $(,)?
-        })?
+        $(
+            data struct $data_struct_name:ident {
+                $(
+                    $(#[$data_struct_element_attribute:meta])*
+                    $data_name:ident: $data_type:ty
+                ),*
+                $(,)?
+            }
+        )?
+
     ) => {
         $(#[$attribute])*
         #[non_exhaustive]
@@ -143,8 +152,12 @@ macro_rules! create_generator {
         }
 
         $(
+            #[derive(Debug)]
             pub struct $data_struct_name {
-                $($data_name: $data_type,)*
+                $(
+                    $(#[$data_struct_element_attribute])*
+                    pub $data_name: $data_type,
+                )*
             }
 
             impl $name {
@@ -250,7 +263,7 @@ macro_rules! create_generator {
         pub struct $name {
             $(
                 $(#[$element_attribute])*
-                pub(super) $element: $type,
+                pub $element: $type,
             )*
         }
 
