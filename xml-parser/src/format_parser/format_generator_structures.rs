@@ -1,6 +1,21 @@
 use crate::generator_structures::{Generator, ToConstant, create_generator};
 
 create_generator! {
+    xml enum TestImageFormat {
+        R8Uint: "VK_FORMAT_R8_UINT",
+        R8Sint: "VK_FORMAT_R8_SINT",
+        R8Unorm: "VK_FORMAT_R8_UNORM",
+    }
+
+    data struct TestImageFormatData {
+        num_bits: u32,
+        block_extent: (u32, u32, u32),
+        packed: Option<u32>,
+        planes: Vec<ImageFormatPlane>,
+    }
+}
+
+create_generator! {
     #[allow(non_camel_case_types)]
     xml enum ImageFormat {
         // 8 bits.
@@ -386,17 +401,17 @@ create_generator! {
     data struct ImageFormatData {
         /// The class of the format.
         class: ImageFormatClass,
-    
+
         /// The number of bytes in a single block of texels.
         num_bytes: u32,
-    
+
         /// The number of texels in a single block.
         /// May not be equal to the values of block_extent multiplied together.
         texels_per_block: u32,
-        
+
         /// The size in 3D space of each block of texels.
         block_extent: (u32, u32, u32),
-    
+
         /// Stores if the data is packed or not.
         /// On a non-packed data format, the data is stored in a byte array, with each component
         /// taking up as many of these bytes as needed.
@@ -411,7 +426,7 @@ create_generator! {
         /// The distinction matters due to the endianness of CPUs.
         /// There may be padding to fill the words if the channels do not.
         packed: Option<u32>,
-    
+
         /// The texel planes in the format.
         /// A plane is a memory layout.
         /// Lots of formats only have one plane, but some have more.

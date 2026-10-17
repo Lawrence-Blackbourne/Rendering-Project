@@ -26,6 +26,8 @@ pub trait Generator {
 /// generate_text function, which would take the above array
 macro_rules! create_generator {
     // Internal helper branches.
+    () => {};
+
     (@replace $old:tt, $new:tt) => {$new};
 
     (@format_attribute doc = $text:expr) => {concat!("///", $text)};
@@ -38,15 +40,14 @@ macro_rules! create_generator {
         format!("{}({})", stringify!($name::$element), $replacement.to_constant())
     };
 
-    (@generator_implementation $name:ident, $type:ident $(,$extra:tt)* $(,)?) => {
+    (@generator_implementation $name:ident, $type:ident $(,)?) => {
         impl Generator for $name {
             fn generate_text() -> String {
                 format!(
                     "{}\n\
                     pub {} {} {{\n\
                     {}\n\
-                    }}\n\
-                    {}",
+                    }}",
                     Self::ATTRIBUTES,
                     stringify!($type),
                     Self::NAME,
@@ -57,14 +58,15 @@ macro_rules! create_generator {
                         ))
                         .collect::<Vec<_>>()
                         .join("\n"),
-                    concat!($(stringify!($extra)),*),
                 )
             }
         }
     };
 
     // The XML enum branch.
-    (
+    (@munch
+        [names: $($names:ident)*]
+        [prev_name: $prev_name:ident]
         $(#[$attribute:meta])*
         xml enum $name:ident {
             $(
@@ -73,15 +75,7 @@ macro_rules! create_generator {
             ),*
             $(,)?
         }
-        $(
-            data struct $data_struct_name:ident {
-                $(
-                    $(#[$data_struct_element_attribute:meta])*
-                    $data_name:ident: $data_type:ty
-                ),*
-                $(,)?
-            }
-        )?
+        $($tail:tt)*
 
     ) => {
         $(#[$attribute])*
@@ -151,48 +145,66 @@ macro_rules! create_generator {
             }
         }
 
-        $(
-            #[derive(Debug)]
-            pub struct $data_struct_name {
+        create_generator!(@munch
+            [names: ]
+            $($tail)*
+            //TODO finish and add to all others.
+        )
+    };
+
+    (@munch
+        [names: $($names:ident)*]
+        [prev_name: $prev_name:ident]
+        data struct $name:ident {
+            $(
+                $(#[$element_attribute:meta])*
+                $element_name:ident: $type:ty
+            ),*
+            $(,)?
+        }
+    ) => {
+        #[derive(Debug)]
+        pub struct $name {
+            $(
+                $(#[$element_attribute])*
+                pub $element_name: $type,
+            )*
+        }
+
+        impl $element_name {
+            pub fn generate_getters(data: Vec<($prev_name, $name)>) -> String {
+                //TODO check unique data entry present for all variants
+
                 $(
-                    $(#[$data_struct_element_attribute])*
-                    pub $data_name: $data_type,
+                    let mut $element_name = format!(
+                        "\tfn {}(&self) => {} {{\
+                        \t\tmatch self {{",
+                        stringify!($element_name),
+                        stringify!($element_name),
+                    );
                 )*
-            }
 
-            impl $name {
-                pub fn generate_getters(data: Vec<($name, $data_struct_name)>) -> String {
-                    //TODO check unique data entry present for all variants
-
-                    $(
-                        let mut $data_name = format!(
-                            "\tfn {}(&self) => {} {{\
-                            \t\tmatch self {{",
-                            stringify!($data_name),
-                            stringify!($data_type),
-                        );
-                    )*
-
-                    for (variant, item) in data {
-                        $($data_name.push_str(
-                            &format!("\t\t\t{} => {},\n", variant, item.$data_name.to_constant())
-                        );)*
-                    }
-
-                    $(
-                        $data_name += "\t\t}\n\t}";
-                    )*
-
-                    let mut result = String::new();
-                    $(result.push_str(&format!("{}\t\t}}\n\t}}", $data_name));)*
-                    result
+                for (variant, item) in data {
+                    $($element_name.push_str(
+                        &format!("\t\t\t{} => {},\n", variant, item.$element_name.to_constant())
+                    );)*
                 }
+
+                $(
+                    $element_name += "\t\t}\n\t}";
+                )*
+
+                let mut result = String::new();
+                $(result.push_str(&format!("{}\t\t}}\n\t}}", $element_name));)*
+                result
             }
-        )*
+        }
     };
 
     // The enum branch
-    (
+    (@munch
+        [names: $($names:ident)*]
+        [prev_name: $prev_name:ident]
         $(#[$attribute:meta])*
         enum $name:ident {
             $(
@@ -201,7 +213,7 @@ macro_rules! create_generator {
             ),*
             $(,)?
         }
-        $($extra:tt)*
+        $($tail:tt)*
     ) => {
         $(#[$attribute])*
         pub enum $name {
@@ -235,7 +247,7 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!(@generator_implementation $name, enum, $($extra),*);
+        create_generator!(@generator_implementation $name, enum);
 
         impl ToConstant for $name {
             fn to_constant(self) -> String {
@@ -245,10 +257,14 @@ macro_rules! create_generator {
                 }
             }
         }
+
+        create_generator!($($tail)*)
     };
 
     // The struct branch.
-    (
+    (@munch
+        [names: $($names:ident)*]
+        [prev_name: $prev_name:ident]
         $(#[$attribute:meta])*
         struct $name:ident {
             $(
@@ -257,7 +273,7 @@ macro_rules! create_generator {
             ),*
             $(,)?
         }
-        $($extra:tt)*
+        $($tail:tt)*
     ) => {
         $(#[$attribute])*
         pub struct $name {
@@ -292,7 +308,7 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!(@generator_implementation $name, struct, $($extra),*);
+        create_generator!(@generator_implementation $name, struct);
 
         impl ToConstant for $name {
             fn to_constant(self) -> String {
@@ -305,6 +321,8 @@ macro_rules! create_generator {
                 format!("{result}\n}}")
             }
         }
+
+        create_generator!($($tail)*)
     };
 }
 
