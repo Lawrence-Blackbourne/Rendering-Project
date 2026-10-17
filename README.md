@@ -1,5 +1,5 @@
 # Vulkan Rendering Library (`rendering-project`)
-A work-in-progress, high-level graphics library written in **Rust** built on top of **Vulkan** and **GLFW**. The goal is creating an idiomatic rust API to allow for rendering, keeping the controlability and high performance of Vulkan but increasing simplicity.
+A work-in-progress, high-level graphics library written in **Rust**, built on top of **Vulkan** and **GLFW**. The goal is creating an idiomatic Rust API to allow for rendering, keeping the controllability and high performance of Vulkan but increasing simplicity.
 
 ## Architecture & Workspace Structure
 This repository is organised as a Cargo workspace containing two crates:
