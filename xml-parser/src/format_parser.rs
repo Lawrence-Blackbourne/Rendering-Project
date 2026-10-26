@@ -1,7 +1,8 @@
-pub(crate) mod format_generator_structures;
+mod format_generator_structures;
 
 use super::text_parser::{Item, ParsedXml};
 use format_generator_structures::*;
+pub use format_generator_structures::{GenerationData, generate_text};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FormatAttributeInfo {
@@ -45,12 +46,12 @@ struct NamedComponentInfo {
     plane: u32,
 }
 
-pub fn parse_formats<T: ParsedXml>(xml: &mut T, vec: &mut Vec<(ImageFormat, ImageFormatData)>) {
+pub fn parse_formats<T: ParsedXml>(xml: &mut T, data: &mut GenerationData) {
     loop {
         match xml.next() {
             Some(Ok(Item::Element { name, attributes })) if name == String::from("format") => {
                 if let Some(format) = get_format(attributes, xml) {
-                    vec.push(format);
+                    data.image_format_data.push(format);
                 }
             }
             Some(Ok(Item::Element { .. })) => {

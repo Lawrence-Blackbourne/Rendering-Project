@@ -1,19 +1,4 @@
-use crate::generator_structures::{Generator, ToConstant, create_generator};
-
-create_generator! {
-    xml enum TestImageFormat {
-        R8Uint: "VK_FORMAT_R8_UINT",
-        R8Sint: "VK_FORMAT_R8_SINT",
-        R8Unorm: "VK_FORMAT_R8_UNORM",
-    }
-
-    data struct TestImageFormatData {
-        num_bits: u32,
-        block_extent: (u32, u32, u32),
-        packed: Option<u32>,
-        planes: Vec<ImageFormatPlane>,
-    }
-}
+use crate::generator_structures::{ToConstant, create_generator};
 
 create_generator! {
     #[allow(non_camel_case_types)]
@@ -398,7 +383,7 @@ create_generator! {
         Astc6x6x6Srgb: "VK_FORMAT_ASTC_6x6x6_SRGB_BLOCK_EXT",
     }
 
-    data struct ImageFormatData {
+    data struct ImageFormatData for ImageFormat as image_format_data {
         /// The class of the format.
         class: ImageFormatClass,
 
@@ -432,9 +417,7 @@ create_generator! {
         /// Lots of formats only have one plane, but some have more.
         planes: Vec<ImageFormatPlane>,
     }
-}
 
-create_generator! {
     //TODO figure out which of these are no longer needed
     /// The class of the image format.
     /// Similar formats may share a class.
@@ -536,10 +519,7 @@ create_generator! {
         Astc6x6x5: "ASTC_6x6x5",
         Astc6x6x6: "ASTC_6x6x6",
     }
-}
 
-create_generator! {
-    //todo
     #[derive(Debug, Clone, PartialEq, Eq, Hash)]
     struct ImageFormatPlane{
         components: Vec<ImageFormatComponent>,
@@ -557,17 +537,13 @@ create_generator! {
             self.compatible_single_plane_format
         }
     }
-}
 
-create_generator! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
     struct ImageFormatScaleDivisors{
         pub width: ImageFormatScaleDivisor,
         pub height: ImageFormatScaleDivisor,
     }
-}
 
-create_generator! {
     /// Image format scale divisors allow formats to have higher resolution for some components
     /// than others.
     /// The only divisors currently in use are `Regular` and `Half`.
@@ -579,9 +555,7 @@ create_generator! {
         #[default] Regular: "1",
         Half: "2",
     }
-}
 
-create_generator! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     struct ImageFormatComponent {
         /// What channel is this (e.g. red, green, blue, etc.).
@@ -596,9 +570,7 @@ create_generator! {
 
         pub fn data_type(&self) -> ImageFormatComponentDataType {self.data_type}
     }
-}
 
-create_generator! {
     /// The different options for what a channel can represent.
     xml enum ImageFormatChannel {
         Red: "R",
@@ -617,17 +589,7 @@ create_generator! {
         /// `UnsignedIntegerToFloatingPoint`.
         SharedExponent: "E",
     }
-}
 
-impl TryFrom<char> for ImageFormatChannel {
-    type Error = String;
-
-    fn try_from(value: char) -> Result<Self, Self::Error> {
-        Self::try_from(&*value.encode_utf8(&mut [0; 4]))
-    }
-}
-
-create_generator! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     struct ImageFormatComponentDataType {
         size: ImageFormatComponentDataTypeSize,
@@ -640,9 +602,7 @@ create_generator! {
 
         pub fn format(&self) -> ImageFormatComponentDataTypeFormat {self.format}
     }
-}
 
-create_generator! {
     /// How the data for the component is stored.
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     enum ImageFormatComponentDataTypeSize {
@@ -652,9 +612,7 @@ create_generator! {
         /// The data is stored using the given compression scheme.
         Compressed(ImageFormatComponentCompressionScheme)
     }
-}
 
-create_generator! {
     /// The compression scheme used to store the image channel data.
     xml enum ImageFormatComponentCompressionScheme {
         BlockCompression: "BC",
@@ -663,17 +621,13 @@ create_generator! {
         AdaptiveScalableTextureCompressionLowDynamicRange: "ASTC LDR",
         AdaptiveScalableTextureCompressionHighDynamicRange: "ASTC HDR",
     }
-}
 
-create_generator! {
     xml enum ChromaSubsampler {
         Chroma420: "420",
         Chroma422: "422",
         Chroma444: "444",
     }
-}
 
-create_generator! {
     /// This describes the data type that the data is stored using
     xml enum ImageFormatComponentDataTypeFormat {
         /// An unsigned integer.
@@ -715,5 +669,13 @@ create_generator! {
         /// This format is used for unused bits and shared exponents, as neither have a direct
         /// format.
         None,
+    }
+}
+
+impl TryFrom<char> for ImageFormatChannel {
+    type Error = String;
+
+    fn try_from(value: char) -> Result<Self, Self::Error> {
+        Self::try_from(&*value.encode_utf8(&mut [0; 4]))
     }
 }

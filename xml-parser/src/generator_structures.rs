@@ -1,10 +1,3 @@
-pub trait Generator {
-    fn generate_text() -> String;
-}
-
-
-
-
 /// This macro will generate an enum which implements `GeneratedEnum`.
 /// It will also implement `TryFrom<&str>`.
 /// The enum will automatically have `#[non_exhaustive]` and
@@ -40,9 +33,9 @@ macro_rules! create_generator {
         format!("{}({})", stringify!($name::$element), $replacement.to_constant())
     };
 
-    (@generator_implementation $name:ident, $type:ident $(,)?) => {
-        impl Generator for $name {
-            fn generate_text() -> String {
+    (@generate_text_implementation $name:ident, $type:ident $(,)?) => {
+        impl $name {
+            pub fn generate_text() -> String {
                 format!(
                     "{}\n\
                     pub {} {} {{\n\
@@ -63,10 +56,40 @@ macro_rules! create_generator {
         }
     };
 
+    (@munch
+        [names: $($names:ident)*],
+        [getters: $($getter_type:ident, $xml_enum_type:ident, $identifiers:ident)*],
+        [impls: $($types:ty, $blocks:tt)*],
+    ) => {
+        #[derive(Debug)]
+        pub struct GenerationData {
+            $(pub $identifiers: Vec<($xml_enum_type, $getter_type)>,)*
+        }
+        
+        impl GenerationData {
+            pub fn new() -> GenerationData {
+                GenerationData {
+                    $($identifiers: Vec::new(),)*
+                }
+            }
+        }
+        
+        pub fn generate_text(data: GenerationData) -> String {
+            let mut result = String::new();
+            $(result.push_str(&$names::generate_text());)*
+            $(result.push_str(&$getter_type::generate_text(data.$identifiers));)*
+            $(result.push_str(
+                &format!("impl {} {{{}}}", stringify!($types), stringify!($blocks))
+            );)*
+            result
+        }
+    };
+
     // The XML enum branch.
     (@munch
-        [names: $($names:ident)*]
-        [prev_name: $prev_name:ident]
+        [names: $($names:ident)*],
+        [getters: $($getter_type:ident, $xml_enum_type:ident, $identifiers:ident)*],
+        [impls: $($types:ty, $blocks:tt)*],
         $(#[$attribute:meta])*
         xml enum $name:ident {
             $(
@@ -114,12 +137,12 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!(@generator_implementation $name, enum);
+        create_generator!(@generate_text_implementation $name, enum);
 
         impl TryFrom<&str> for $name {
             type Error = String;
 
-            fn try_from<'a>(value: &'a str) -> Result<Self, Self::Error> {
+            fn try_from(value: &str) -> Result<Self, Self::Error> {
                 match value {
                     $($($xml_name => Ok($name::$element),)*)*
                     other => Err(
@@ -146,22 +169,26 @@ macro_rules! create_generator {
         }
 
         create_generator!(@munch
-            [names: ]
+            [names: $($names)* $name],
+            [getters: $($getter_type, $xml_enum_type, $identifiers)*],
+            [impls: $($types, $blocks)*],
             $($tail)*
-            //TODO finish and add to all others.
-        )
+        );
     };
 
+    // The data strut branch
     (@munch
-        [names: $($names:ident)*]
-        [prev_name: $prev_name:ident]
-        data struct $name:ident {
+        [names: $($names:ident)*],
+        [getters: $($getter_type:ident, $xml_enum_type:ident, $identifiers:ident)*],
+        [impls: $($types:ty, $blocks:tt)*],
+        data struct $name:ident for $enum_name:ident as $identifier:ident {
             $(
                 $(#[$element_attribute:meta])*
                 $element_name:ident: $type:ty
             ),*
             $(,)?
         }
+        $($tail:tt)*
     ) => {
         #[derive(Debug)]
         pub struct $name {
@@ -171,8 +198,8 @@ macro_rules! create_generator {
             )*
         }
 
-        impl $element_name {
-            pub fn generate_getters(data: Vec<($prev_name, $name)>) -> String {
+        impl $name {
+            pub fn generate_text(data: Vec<($enum_name, $name)>) -> String {
                 //TODO check unique data entry present for all variants
 
                 $(
@@ -199,12 +226,20 @@ macro_rules! create_generator {
                 result
             }
         }
+        create_generator!(@munch
+            [names: $($names)*],
+            [getters: $($getter_type, $xml_enum_type, $identifiers)*
+                $name, $enum_name, $identifier],
+            [impls: $($types, $blocks)*],
+            $($tail)*
+        );
     };
 
     // The enum branch
     (@munch
-        [names: $($names:ident)*]
-        [prev_name: $prev_name:ident]
+        [names: $($names:ident)*],
+        [getters: $($getter_type:ident, $xml_enum_type:ident, $identifiers:ident)*],
+        [impls: $($types:ty, $blocks:tt)*],
         $(#[$attribute:meta])*
         enum $name:ident {
             $(
@@ -247,7 +282,7 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!(@generator_implementation $name, enum);
+        create_generator!(@generate_text_implementation $name, enum);
 
         impl ToConstant for $name {
             fn to_constant(self) -> String {
@@ -258,13 +293,19 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!($($tail)*)
+        create_generator!(@munch
+            [names: $($names)* $name],
+            [getters: $($getter_type, $xml_enum_type, $identifiers)*],
+            [impls: $($types, $blocks)*],
+            $($tail)*
+        );
     };
 
     // The struct branch.
     (@munch
-        [names: $($names:ident)*]
-        [prev_name: $prev_name:ident]
+        [names: $($names:ident)*],
+        [getters: $($getter_type:ident, $xml_enum_type:ident, $identifiers:ident)*],
+        [impls: $($types:ty, $blocks:tt)*],
         $(#[$attribute:meta])*
         struct $name:ident {
             $(
@@ -308,7 +349,7 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!(@generator_implementation $name, struct);
+        create_generator!(@generate_text_implementation $name, struct);
 
         impl ToConstant for $name {
             fn to_constant(self) -> String {
@@ -322,7 +363,40 @@ macro_rules! create_generator {
             }
         }
 
-        create_generator!($($tail)*)
+        create_generator!(@munch
+            [names: $($names)* $name],
+            [getters: $($getter_type, $xml_enum_type, $identifiers)*],
+            [impls: $($types, $blocks)*],
+            $($tail)*
+        );
+    };
+    
+    // The impl block branch
+    (@munch
+        [names: $($names:ident)*],
+        [getters: $($getter_type:ident, $xml_enum_type:ident, $identifiers:ident)*],
+        [impls: $($types:ty, $blocks:tt)*],
+        impl $type:ident $block:tt
+        $($tail:tt)*
+    ) => {
+        impl $type $block
+        create_generator!(@munch
+            [names: $($names)*],
+            [getters: $($getter_type, $xml_enum_type, $identifiers)*],
+            [impls: $($types, $blocks)* $type, $block],
+            $($tail)*
+        );
+    };
+
+    (
+        $($tail:tt)*
+    ) => {
+        create_generator!(@munch
+            [names: ],
+            [getters: ],
+            [impls: ],
+            $($tail)*
+        );
     };
 }
 
