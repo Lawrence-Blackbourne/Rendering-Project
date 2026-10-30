@@ -27,6 +27,9 @@ cargo test
 
 # Run Criterion benchmarks
 cargo bench
+
+# Build structures and enums from vk.xml
+cargo run -p xml-parser
 ```
 
-Note that the code does not currently compile, as we are currently working on the migration to remove ash.
+Note that the code does not currently compile, as I am currently working on the migration to remove ash.
