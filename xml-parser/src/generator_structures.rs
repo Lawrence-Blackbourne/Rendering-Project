@@ -1,4 +1,6 @@
-const INDENT_STR: &str = "    ";
+mod constant_handler;
+
+
 
 /// This macro will generate an enum which implements `GeneratedEnum`.
 /// It will also implement `TryFrom<&str>`.
@@ -423,55 +425,3 @@ macro_rules! create_generator {
 }
 
 pub(crate) use create_generator;
-
-//TODO automatically choose to make a new line or not
-pub trait ToConstant {
-    fn to_constant(self, indent_levels: usize) -> String;
-}
-
-impl ToConstant for u32 {
-    fn to_constant(self, _: usize) -> String {
-        self.to_string()
-    }
-}
-
-impl ToConstant for (u32, u32, u32) {
-    fn to_constant(self, _: usize) -> String {
-        format!(
-            "({}, {}, {})",
-            self.0.to_string(),
-            self.1.to_string(),
-            self.2.to_string()
-        )
-    }
-}
-
-impl<T: ToConstant> ToConstant for Option<T> {
-    fn to_constant(self, indent_levels: usize) -> String {
-        match self {
-            Some(value) => format!("Some({})", value.to_constant(indent_levels + 1)),
-            None => String::from("None"),
-        }
-    }
-}
-
-impl<T: ToConstant> ToConstant for Vec<T> {
-    fn to_constant(self, indent_levels: usize) -> String {
-        format!(
-            "vec![\n{}\n]",
-            self.into_iter()
-                .map(|item| indent(&item.to_constant(indent_levels + 1), indent_levels))
-                .collect::<Vec<_>>()
-                .join(",\n"),
-        )
-    }
-}
-
-fn indent(str: &str, levels: usize) -> String {
-    let mut new_str = String::new();
-    for _ in 0..levels {
-        new_str.push_str(INDENT_STR);
-    }
-    new_str.push_str(str);
-    new_str
-}
