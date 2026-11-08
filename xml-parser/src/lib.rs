@@ -46,9 +46,8 @@ pub fn parse_xml(text: impl AsRef<Path>) -> ParsedDetails {
     parsed_xml
 }
 
-/// Here to silence compiler warnings about not yet using the generate_text() options.
-pub fn temp() {
-    format_parser::generate_text(format_parser::GenerationData::new());
+pub fn generate_text(details: ParsedDetails) -> Vec<String> {
+    vec![format_parser::generate_text(details.formats)]
 }
 
 #[cfg(test)]

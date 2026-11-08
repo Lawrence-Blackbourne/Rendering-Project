@@ -73,8 +73,8 @@ fn get_format<T: ParsedXml>(
         Some(info) => info,
         None => {
             xml.skip_current_element().unwrap();
-            return None
-        },
+            return None;
+        }
     };
     let mut element_info = get_format_element_info(xml);
     element_info.planes.sort_by_key(|plane| plane.index);
@@ -94,10 +94,7 @@ fn get_format<T: ParsedXml>(
             compatible_single_plane_format: attribute_info.format,
         })
     }
-    let named_format_info = get_named_components(
-        &attribute_info.name,
-        planes.len() as u32
-    );
+    let named_format_info = get_named_components(&attribute_info.name, planes.len() as u32);
     if let Some(named_format_info) = named_format_info {
         compare_named_and_specified_components(&mut element_info.components, named_format_info);
     }
@@ -187,7 +184,7 @@ fn get_format_attribute_info(attributes: Vec<(String, String)>) -> Option<Format
                     }
                 }
                 name = Some(attribute.1)
-            },
+            }
             "class" => class = Some(ImageFormatClass::try_from(attribute.1.as_str()).unwrap()),
             "blockSize" => num_bytes = Some(attribute.1),
             "texelsPerBlock" => texels_per_block = Some(attribute.1),
@@ -198,9 +195,9 @@ fn get_format_attribute_info(attributes: Vec<(String, String)>) -> Option<Format
                     ImageFormatComponentCompressionScheme::try_from(attribute.1.as_str()).unwrap(),
                 )
             }
-            "chroma" => chroma_subsampling = Some(
-                ChromaSubsampler::try_from(attribute.1.as_str()).unwrap()
-            ),
+            "chroma" => {
+                chroma_subsampling = Some(ChromaSubsampler::try_from(attribute.1.as_str()).unwrap())
+            }
             other => panic!(
                 "Unexpected \"{other}\" attribute found with value \"{}\"",
                 attribute.1,
@@ -266,7 +263,7 @@ fn get_named_components(name: &str, num_planes: u32) -> Option<Vec<NamedComponen
     let mut plane = 0;
     for chunk in chunks {
         if ImageFormatComponentDataTypeFormat::try_from(chunk).is_ok() {
-            continue
+            continue;
         }
         for compression_scheme in [
             "BC1", "BC2", "BC3", "BC4", "BC5", "BC6H", "BC7", "ETC2", "EAC", "ASTC", "PVRTC1",
@@ -298,7 +295,7 @@ fn get_named_components(name: &str, num_planes: u32) -> Option<Vec<NamedComponen
                 match components.peek() {
                     Some(component) if component.is_ascii_digit() => {
                         bits.push(components.next().unwrap())
-                    },
+                    }
                     _ => break,
                 }
             }

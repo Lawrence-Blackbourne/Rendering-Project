@@ -1,10 +1,10 @@
 //! This module is used for translating information from the ash style information the library
 //! receives into useful information for the library user.
 //! The module also contains structs helpful for setting up the device.
-mod temp;
+mod format_info;
 mod generated_structs;
+mod temp;
 
-use generated_structs::{ImageFormatClass, ImageFormatCompressionScheme};
 use crate::renderer::Size2D;
 use ash::vk;
 
@@ -512,50 +512,6 @@ impl TryFrom<vk::ColorSpaceKHR> for ColourSpace {
     }
 }
 
-/// An image format.
-#[non_exhaustive]
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ImageFormat {
-    /// The underlying uk::Format
-    format: vk::Format,
-
-    /// The class of the format
-    format_class: ImageFormatClass,
-
-    /// The size of the texel blocks in bytes
-    byte_block_size: u8,
-
-    /// The number of texels in a block
-    texels_per_block: u8,
-
-    /// The how the texels in the blocks are stored
-    texel_block_extent: (u8, u8, u8),
-
-    /// Stores if the data is packed or not.
-    /// On a packed data format, the data is stored in one big integer, and the first element in the
-    /// order takes the least significant bits, all the way to the most significant bits for the
-    /// last element.
-    /// On a non-packed data format, the data is stored in a byte array, with the first elements of
-    /// the order having the lower index bytes, and the later elements having the higher index.
-    /// Non-packed data formats are only available when each element takes an integer number of
-    /// bytes.
-    /// The distinction between the two possibilities matters when reading the true values stored in
-    /// RAM due to the endianness of systems.
-    /// Some formats have a number of bits not equal to a full number of bytes, and unused bits
-    /// after that to fill the gaps.
-    /// For these, if packed is true, then the group of bits with the unused ones at the end form an
-    /// unpacked word, and it is these words which are then packed
-    packed: Option<u8>,
-
-    /// The list of colour components of the block.
-    /// The order that they are in describes the order of the components in memory.
-    components: Vec<ImageFormatComponent>,
-
-    /// List of the planes found in the block.
-    /// Each one describes an image plane of the format relative to the overall format.
-    planes: Vec<ImageFormatPlane>,
-}
-
 impl TryFrom<vk::Format> for ImageFormat {
     type Error = ();
 
@@ -589,7 +545,6 @@ pub enum FormatConversionError {
     ImageFormatError(vk::Format),
     ColourSpaceError(vk::ColorSpaceKHR),
 }
-
 
 /// A component of the format representing a channel and how the data in that channel is converted
 /// when passed to a shader.
