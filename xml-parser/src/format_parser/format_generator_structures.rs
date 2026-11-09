@@ -1,4 +1,4 @@
-use crate::generator_structures::{ToConstant, create_generator};
+use crate::generator_structures::{create_generator};
 
 create_generator! {
     #[allow(non_camel_case_types)]

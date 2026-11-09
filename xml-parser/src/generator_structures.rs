@@ -1,6 +1,6 @@
 mod constant_handler;
 
-
+pub use constant_handler::{Constant, ConstantList, ConstantBracket};
 
 /// This macro will generate an enum which implements `GeneratedEnum`.
 /// It will also implement `TryFrom<&str>`.
@@ -30,6 +30,21 @@ macro_rules! create_generator {
 
     (@format_attribute doc = $text:expr) => {concat!("///", $text)};
     (@format_attribute $other:meta) => {stringify!(#[$other])};
+
+    (@enum_to_constant $name:ident, $element:ident) => {
+        crate::generator_structures::Constant::Value(
+            String::from(format!("{}::{}", stringify!($name), stringify!($element)))
+        ),
+    };
+
+    (@enum_to_constant $name:ident, $element:ident, $variable:ident) => {
+        crate::generator_structures::Constant::List(crate::generator_structures::ConstantList {
+            name: String::from(format!("{}::{}", stringify!($name), stringify!($element))),
+            bracket: crate::generator_structures::ConstantBracket::Parenthesis,
+            items: vec![$variable.to_constant()],
+        }),
+    };
+
 
     (@generate_text_implementation $name:ident, $type:ident $(,)?) => {
         impl $name {
@@ -160,9 +175,9 @@ macro_rules! create_generator {
         }
 
         impl ToConstant for $name {
-            fn to_constant(self, _: usize) -> String {
+            fn to_constant(self, _: usize) -> crate::generator_structures::Constant {
                 match self {$(
-                    $name::$element => format!("{}::{}", stringify!($name), stringify!($element)),
+                    $name::$element => create_generator!(@enum_to_constant $name, $element)
                 )*}
             }
         }
@@ -291,15 +306,16 @@ macro_rules! create_generator {
         create_generator!(@generate_text_implementation $name, enum);
 
         impl ToConstant for $name {
-            fn to_constant(self, indent_levels: usize) -> String {
+            fn to_constant(self, indent_levels: usize) -> Constant {
                 match self {
                     $(
                         $name::$element$((create_generator!(@replace $type, val)))* => {
-                            let name = String::from(stringify!($name::$element));
-                            $(
-                                let name = format!("{}({})", name, create_generator!(@replace $type, val).to_constant(indent_levels));
-                            )*
-                            name
+                            create_generator!(
+                                @enum_to_constant
+                                $name,
+                                $element
+                                $(, create_generator!(@replace $type, val))*
+                            )
                         }
                     )*
                 }
