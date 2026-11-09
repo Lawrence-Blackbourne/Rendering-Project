@@ -1,5 +1,5 @@
 [workspace]
-members = [".", "xml-parser"]
+members = [".", "code-generator", "generator-macros"]
 default-members = [".", "xml-parser"]
 
 [package]

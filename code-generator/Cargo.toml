@@ -1,9 +1,10 @@
 [package]
-name = "xml-parser"
+name = "code-generator"
 version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+generator-macros = { path = "../generator-macros "}
 criterion = { workspace = true, optional = true }
 
 [lib]

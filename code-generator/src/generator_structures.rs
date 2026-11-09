@@ -1,3 +1,13 @@
+//! TODO REWRITE THIS ENTIRE MACRO AS A PROCEDURAL MACRO
+//! What I am trying to do here has grown far too big for this macro.
+//! I am getting 5000+ line outputs that are almost impossible to debug.
+//! We are also running into issues with the hygiene requirements, causing the use of workarounds
+//! like the @replace branch.
+//! It is very difficult to add proper error handling here.
+//! This file will be left here as a reference until the new macro is working, and then deleted.
+//! Marco_rules! is just not designed for the use case I am using it for here, and we have outgrown
+//! it.
+
 mod constant_handler;
 
 pub use constant_handler::{Constant, ConstantList, ConstantBracket};
@@ -34,7 +44,7 @@ macro_rules! create_generator {
     (@enum_to_constant $name:ident, $element:ident) => {
         crate::generator_structures::Constant::Value(
             String::from(format!("{}::{}", stringify!($name), stringify!($element)))
-        ),
+        )
     };
 
     (@enum_to_constant $name:ident, $element:ident, $variable:ident) => {
@@ -177,7 +187,7 @@ macro_rules! create_generator {
         impl ToConstant for $name {
             fn to_constant(self, _: usize) -> crate::generator_structures::Constant {
                 match self {$(
-                    $name::$element => create_generator!(@enum_to_constant $name, $element)
+                    $name::$element => create_generator!(@enum_to_constant $name, $element),
                 )*}
             }
         }
@@ -309,14 +319,14 @@ macro_rules! create_generator {
             fn to_constant(self, indent_levels: usize) -> Constant {
                 match self {
                     $(
-                        $name::$element$((create_generator!(@replace $type, val)))* => {
-                            create_generator!(
-                                @enum_to_constant
-                                $name,
-                                $element
-                                $(, create_generator!(@replace $type, val))*
-                            )
-                        }
+                        $name::$element$(
+                           (create_generator!(@replace $type, val))
+                        )* => create_generator!(
+                            @enum_to_constant
+                            $name,
+                            $element
+                            $(, create_generator!(@replace $type, val))*
+                        ),
                     )*
                 }
             }
