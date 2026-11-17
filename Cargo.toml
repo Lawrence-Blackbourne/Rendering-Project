@@ -1,6 +1,6 @@
 [workspace]
 members = [".", "code-generator", "generator-macros"]
-default-members = [".", "xml-parser"]
+default-members = [".", "code-generator", "generator-macros"]
 
 [package]
 name = "rendering-project"
