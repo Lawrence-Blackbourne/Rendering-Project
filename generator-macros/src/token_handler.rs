@@ -71,36 +71,53 @@ pub struct Struct {
 
 pub struct StructElement {
     attributes: Vec<Group>,
-    visibility: String, //TODO check if String is how I should be storing visibilities.
+    visibility: TokenStream,
     name: Ident,
-    element_type: String,
+    element_type: TokenStream,
 }
 
 pub struct DataStruct {
     name: Ident,
-    enum_name: String,
-    identifier: String, //TODO assess if this is needed.
+    enum_name: Ident,
+    identifier: Ident, //TODO assess if this is needed.
     elements: Vec<DataStructElement>,
 }
 
 pub struct DataStructElement {
     attributes: Vec<Group>,
     name: Ident,
-    element_type: String, //TODO check if String is how I should be storing types.
+    element_type: TokenStream, //TODO check if String is how I should be storing types.
+}
+
+impl TryFrom<StructElement> for DataStructElement {
+    type Error = ();
+
+    fn try_from(value: StructElement) -> Result<Self, Self::Error> {
+        if value.visibility.is_empty() {
+            Err(())
+        } else {
+            Ok(DataStructElement {
+                attributes: value.attributes,
+                name: value.name,
+                element_type: value.element_type,
+            })
+        }
+    }
 }
 
 pub struct ImplBlock {
+    type_implemented_on: Ident,
     tokens: TokenStream,
 }
 
 type PeekableTokenStream = Peekable<token_stream::IntoIter>;
 
 impl Items {
-    fn get_attributes(&mut self) -> Vec<Group> {
+    pub fn get_attributes(&mut self) -> Vec<Group> {
         get_attributes_from_tokens(&mut self.tokens)
     }
 
-    fn tokenise_item(&mut self, attributes: Vec<Group>) -> Option<Item> {
+    pub fn tokenise_item(&mut self, attributes: Vec<Group>) -> Option<Item> {
         match self.tokens.next()? {
             TokenTree::Ident(ident) => {
                 match ident.to_string().as_str() {
@@ -117,14 +134,12 @@ impl Items {
     }
 
     fn tokenise_enum(&mut self, attributes: Vec<Group>) -> Enum {
-        let Some(TokenTree::Ident(name)) = self.tokens.next() else {
-            panic!("Expected enum name");
-        };
+        let name = get_ident(&mut self.tokens);
         let mut inner_tokens = expect_group(&mut self.tokens, Delimiter::Brace);
         let mut elements = Vec::new();
         while inner_tokens.peek().is_some() {
             let element_attributes = get_attributes_from_tokens(&mut inner_tokens);
-            let element_name = get_ident(&mut self.tokens);
+            let element_name = get_ident(&mut inner_tokens);
             let element_type = match inner_tokens.next() {
                 None => None,
                 Some(TokenTree::Punct(p)) if p == ',' => None,
@@ -158,14 +173,12 @@ impl Items {
 
     fn tokenise_xml_enum(&mut self, attributes: Vec<Group>) -> XmlEnum {
         expect_ident(&mut self.tokens, "enum");
-        let Some(TokenTree::Ident(name)) = self.tokens.next() else {
-            panic!("Expected xml enum name");
-        };
+        let name = get_ident(&mut self.tokens);
         let mut inner_tokens = expect_group(&mut self.tokens, Delimiter::Brace);
         let mut elements = Vec::new();
         while inner_tokens.peek().is_some() {
             let element_attributes = get_attributes_from_tokens(&mut inner_tokens);
-            let element_name = get_ident(&mut self.tokens);
+            let element_name = get_ident(&mut inner_tokens);
             let element_xml_name = match inner_tokens.next() {
                 None => None,
                 Some(TokenTree::Punct(p)) if p == ',' => None,
@@ -195,6 +208,89 @@ impl Items {
             elements,
         }
     }
+
+    fn tokenise_struct(&mut self, attributes: Vec<Group>) -> Struct {
+        let name = get_ident(&mut self.tokens);
+        let mut inner_tokens = expect_group(&mut self.tokens, Delimiter::Brace);
+        let mut elements = Vec::new();
+        while let Some(element) = get_struct_element(&mut inner_tokens) {
+            elements.push(element);
+        }
+        Struct {
+            attributes,
+            name,
+            elements,
+        }
+    }
+
+    fn tokenise_data_struct(&mut self) -> DataStruct {
+        expect_ident(&mut self.tokens, "enum");
+        let name = get_ident(&mut self.tokens);
+        expect_ident(&mut self.tokens, "for");
+        let enum_name = get_ident(&mut self.tokens);
+        expect_ident(&mut self.tokens, "as");
+        let identifier = get_ident(&mut self.tokens);
+        let mut inner_tokens = expect_group(&mut self.tokens, Delimiter::Brace);
+        let mut elements = Vec::new();
+        while let Some(element) = get_struct_element(&mut inner_tokens) {
+            elements.push(DataStructElement::try_from(element)
+                .expect("Data struct elements cannot have visibility"));
+        }
+        DataStruct {
+            name,
+            enum_name,
+            identifier,
+            elements,
+        }
+    }
+
+    fn tokenise_impl_block(&mut self, attributes: Vec<Group>) -> ImplBlock {
+        let type_implemented_on = get_ident(&mut self.tokens);
+        let tokens = expect_group(&mut self.tokens, Delimiter::Brace).collect();
+        ImplBlock {
+            type_implemented_on,
+            tokens,
+        }
+    }
+}
+
+fn get_struct_element(tokens: &mut PeekableTokenStream) -> Option<StructElement> {
+    if tokens.peek().is_none() {
+        return None
+    }
+    let element_attributes = get_attributes_from_tokens(tokens);
+    let possible_visibility = get_ident(tokens);
+    let (visibility, element_name) = match possible_visibility.to_string().as_str() {
+        "pub" => {
+            match tokens.next() {
+                Some(TokenTree::Group(group)) => (
+                    vec![
+                        TokenTree::Ident(possible_visibility),
+                        TokenTree::Group(group),
+                    ].into_iter().collect(),
+                    get_ident(tokens),
+                ),
+                Some(TokenTree::Ident(ident)) => (
+                    TokenStream::from(TokenTree::Ident(possible_visibility)), ident
+                ),
+                Some(other) => panic!("Unexpected token found in struct: {}", other),
+                None => panic!("Unexpected end of stream"),
+            }
+        },
+        _ => (TokenStream::new(), possible_visibility),
+    };
+    let element_type = expect_group(tokens, Delimiter::Parenthesis).collect();
+    match tokens.next() {
+        None => {},
+        Some(TokenTree::Punct(p)) if p == ',' => {},
+        Some(other) => panic!("Invalid end of struct element, found \"{}\"", other),
+    }
+    Some(StructElement {
+        attributes: element_attributes,
+        visibility,
+        name: element_name,
+        element_type,
+    })
 }
 
 fn get_attributes_from_tokens(tokens: &mut PeekableTokenStream) -> Vec<Group> {

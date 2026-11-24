@@ -1,3 +1,6 @@
+/// Limitations:
+/// Can only handle impl typename {} and not impl ... for typename {}
+
 mod token_handler;
 
 use proc_macro::TokenStream;
