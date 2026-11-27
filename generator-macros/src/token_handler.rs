@@ -7,11 +7,11 @@
 //! One benefit of doing things this way is that I can also directly use any modifications to the
 //! AST I made in the token tree.
 
-use proc_macro::{token_stream, TokenStream, TokenTree, Group, Ident, Delimiter, Literal};
+use crate::tokens::{self, TokenStream, TokenTree, Group, Ident, Delimiter, Literal};
 use std::iter::Peekable;
 
 pub struct Items {
-    tokens: Peekable<token_stream::IntoIter>,
+    tokens: Peekable<tokens::IntoIter>,
 }
 
 impl Items {
@@ -26,11 +26,12 @@ impl Iterator for Items {
     type Item = Item;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let attributes = self.get_attributes();
+        let attributes = get_attributes(&mut self.tokens);
         self.tokenise_item(attributes)
     }
 }
 
+#[derive(Debug)]
 pub enum Item {
     Enum(Enum),
     XmlEnum(XmlEnum),
@@ -39,36 +40,74 @@ pub enum Item {
     ImplBlock(ImplBlock),
 }
 
+impl Item {
+    pub fn attributes(&self) -> Option<&Vec<Group>> {
+        match self {
+            Item::Enum(item) => Some(item.attributes()),
+            Item::XmlEnum(item) => Some(item.attributes()),
+            Item::Struct(item) => Some(item.attributes()),
+            Item::DataStruct(_) => None,
+            Item::ImplBlock(item) => Some(item.attributes()),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Enum {
     attributes: Vec<Group>,
     name: Ident,
     elements: Vec<EnumElement>,
 }
 
+impl Enum {
+    pub fn attributes(&self) -> &Vec<Group> {
+        &self.attributes
+    }
+}
+
+#[derive(Debug)]
 pub struct EnumElement {
     attributes: Vec<Group>,
     name: Ident,
     element_type: Option<TokenStream>
 }
 
+#[derive(Debug)]
 pub struct XmlEnum {
     attributes: Vec<Group>,
     name: Ident,
     elements: Vec<XmlEnumElement>,
 }
 
+impl XmlEnum {
+    pub fn attributes(&self) -> &Vec<Group> {
+        &self.attributes
+    }
+}
+
+
+#[derive(Debug)]
 pub struct XmlEnumElement {
     attributes: Vec<Group>,
     name: Ident,
     xml_name: Option<Literal>,
 }
 
+#[derive(Debug)]
 pub struct Struct {
     attributes: Vec<Group>,
     name: Ident,
     elements: Vec<StructElement>,
 }
 
+impl Struct {
+    pub fn attributes(&self) -> &Vec<Group> {
+        &self.attributes
+    }
+}
+
+
+#[derive(Debug)]
 pub struct StructElement {
     attributes: Vec<Group>,
     visibility: TokenStream,
@@ -76,6 +115,7 @@ pub struct StructElement {
     element_type: TokenStream,
 }
 
+#[derive(Debug)]
 pub struct DataStruct {
     name: Ident,
     enum_name: Ident,
@@ -83,6 +123,7 @@ pub struct DataStruct {
     elements: Vec<DataStructElement>,
 }
 
+#[derive(Debug)]
 pub struct DataStructElement {
     attributes: Vec<Group>,
     name: Ident,
@@ -105,17 +146,23 @@ impl TryFrom<StructElement> for DataStructElement {
     }
 }
 
+#[derive(Debug)]
 pub struct ImplBlock {
+    attributes: Vec<Group>,
     type_implemented_on: Ident,
     tokens: TokenStream,
 }
 
-type PeekableTokenStream = Peekable<token_stream::IntoIter>;
+impl ImplBlock {
+    pub fn attributes(&self) -> &Vec<Group> {
+        &self.attributes
+    }
+}
+
+
+type PeekableTokenStream = Peekable<tokens::IntoIter>;
 
 impl Items {
-    pub fn get_attributes(&mut self) -> Vec<Group> {
-        get_attributes_from_tokens(&mut self.tokens)
-    }
 
     pub fn tokenise_item(&mut self, attributes: Vec<Group>) -> Option<Item> {
         match self.tokens.next()? {
@@ -138,7 +185,7 @@ impl Items {
         let mut inner_tokens = expect_group(&mut self.tokens, Delimiter::Brace);
         let mut elements = Vec::new();
         while inner_tokens.peek().is_some() {
-            let element_attributes = get_attributes_from_tokens(&mut inner_tokens);
+            let element_attributes = get_attributes(&mut inner_tokens);
             let element_name = get_ident(&mut inner_tokens);
             let element_type = match inner_tokens.next() {
                 None => None,
@@ -177,7 +224,7 @@ impl Items {
         let mut inner_tokens = expect_group(&mut self.tokens, Delimiter::Brace);
         let mut elements = Vec::new();
         while inner_tokens.peek().is_some() {
-            let element_attributes = get_attributes_from_tokens(&mut inner_tokens);
+            let element_attributes = get_attributes(&mut inner_tokens);
             let element_name = get_ident(&mut inner_tokens);
             let element_xml_name = match inner_tokens.next() {
                 None => None,
@@ -248,6 +295,7 @@ impl Items {
         let type_implemented_on = get_ident(&mut self.tokens);
         let tokens = expect_group(&mut self.tokens, Delimiter::Brace).collect();
         ImplBlock {
+            attributes,
             type_implemented_on,
             tokens,
         }
@@ -258,7 +306,7 @@ fn get_struct_element(tokens: &mut PeekableTokenStream) -> Option<StructElement>
     if tokens.peek().is_none() {
         return None
     }
-    let element_attributes = get_attributes_from_tokens(tokens);
+    let element_attributes = get_attributes(tokens);
     let possible_visibility = get_ident(tokens);
     let (visibility, element_name) = match possible_visibility.to_string().as_str() {
         "pub" => {
@@ -293,7 +341,7 @@ fn get_struct_element(tokens: &mut PeekableTokenStream) -> Option<StructElement>
     })
 }
 
-fn get_attributes_from_tokens(tokens: &mut PeekableTokenStream) -> Vec<Group> {
+fn get_attributes(tokens: &mut PeekableTokenStream) -> Vec<Group> {
     let mut attributes = Vec::new();
     loop {
         match tokens.peek() {
@@ -375,4 +423,11 @@ fn expect_punct(tokens: &mut PeekableTokenStream, punct: char) {
         panic!("Expected '{}' but found \"{}\"", punct, result.to_string());
     };
     assert_eq!(result, punct, "Expected '{}' but found '{}'", punct, result);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+
 }
