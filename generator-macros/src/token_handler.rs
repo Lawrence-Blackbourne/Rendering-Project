@@ -428,6 +428,4 @@ fn expect_punct(tokens: &mut PeekableTokenStream, punct: char) {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-
 }
